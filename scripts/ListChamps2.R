@@ -26,116 +26,270 @@
 #'
 #' @export
 
+  library(foreign) # TODO : à intégrer dans NAMESPACE -> pour read.dbf
 
-ListChamps2 <- function(rep1, rep2, df_Infos) {
-library(foreign)
-# rep1<- "/Users/Valentin/Foret/Travail/PNRVN/Ilots_PNRVN"
-# setwd(rep1)
-#
-# rep2 <- "/Users/Valentin/Foret/Travail/PNRVN/Ilots_PNRVN/Data/SIG/Vecteurs/DataBrutes"
-# df_Infos <- Path_DF
-
-
-  setwd(rep2)
-  Shp_FILES <- unique(df_Infos$Source)
-  names(Shp_FILES) <- df_Infos$Id[match(Shp_FILES, df_Infos$Source)] # Identifiant
-
+ListChamps2 <- function(
+  rep1, rep2, 
+  df_Infos
+  ) {
+  rep1 <- "/Users/Valentin/Travail/Outils/GitHub/corridor" # debug
+  rep2 <- file.path(rep1, "data/raw") # debug
+  df_Infos <- Path_DF # debug
+  # rep1<- "/Users/Valentin/Foret/Travail/PNRVN/Ilots_PNRVN"
+  # setwd(rep1)
+  #
+  # rep2 <- "/Users/Valentin/Foret/Travail/PNRVN/Ilots_PNRVN/Data/SIG/Vecteurs/DataBrutes"
+  # df_Infos <- Path_DF
+  
+  
+  setwd(rep2) # TODO : mieux gérer les différents répertoires
+  
+  # -- ancienne écriture
+  # Shp_FILES <- unique(df_Infos$source)
+  # names(Shp_FILES) <- df_Infos$Id[match(Shp_FILES, df_Infos$source)] # Identifiant
+  
+  # -- nouvelle écriture
+  # list_raw_shp <- list_raw_files_tree[
+  #   str_ends(list_raw_files_tree, ".shp")
+  # ]
+  # -- autre écriture
+  # list_raw_shp <- unique(raw_files_tree$source)
+  # names(list_raw_shp) <- raw_files_tree$Id[match(list_raw_shp, raw_files_tree$source)]
+  # -- autre écriture
+  df <- raw_files_tree %>% select(Id, source) %>% distinct()
+  list_raw_shp <- df$source ; names(list_raw_shp) <- df$Id # list_raw_shp = Shp_FILES
+  
   # Initialisation boucle
   # List_SHP <- c()
-  df_BASE <- data.frame(Id=character(),
-                        shp=character(),
-                        Attributs=character(),
-                        stringsAsFactors=F)
-
-  ListShp_DF <- c() # Espace de sauvegarde des tables attributaires déjà lues
-
-  pb <- tkProgressBar("Progression", "Importation des shapes (%)", 0, 100, width=500)
-
-  for (i in 1:length(Shp_FILES)) {
-    # i <- 186
-    file_name <- names(Shp_FILES)[i]
-    file <- paste0(str_sub(Shp_FILES[[i]], 1, -4),"dbf")
-    tab <- read.dbf(file,as.is=T)
-
+  shp_schema <- data.frame( # df_BASE
+    Id = character(), 
+    shp = character(), 
+    Attributs = character(), 
+    stringsAsFactors = F
+  )
+  
+  # espace de sauvegarde des tables attributaires déjà lues
+  shp_tab <- c() # shp_tab = ListShp_DF 
+  
+  # barre de progression
+  pb <- tkProgressBar(
+    title = "Progression", 
+    label = "Importation des shapes (%)", 
+    min = 0, max = 100, width = 500
+  )
+  
+  for (i in 1:length(list_raw_shp)) {
+    # i <- 1 # debug
+    file_name <- names(list_raw_shp)[i]
+    # TODO : gérer le cas où les fichiers sont au format mapinfo (.TAB, ...)
+    # file <- paste0(str_sub(list_raw_shp[[i]], 1, -4), "dbf")
+    file <- sub(pattern = ".shp", replacement = ".dbf", list_raw_shp[i])
+    
+    if (is.element(file, list_raw_files_tree)) { # sécurité si pas de .dbf présent
+      tab <- read.dbf(file, as.is = T)
+    } else {
+      stop("fichier ", file, " introuvable dans le dossier ", rep2)
+    }
+    
     # Sauvegarde de la table attributaire lue :
-    ListShp_DF <- c(ListShp_DF,list(tab))
-    names(ListShp_DF)[i] <- file_name
-
+    shp_tab <- c(shp_tab, list(tab))
+    names(shp_tab)[i] <- file_name
+    col_names <- names(tab)
+    # col_nb <- length(col_names)
+    layer <- file_path_sans_ext(basename(file))
+    
     # Création de la table du classeur 'Parametres_SIG'
-    df1 <- data.frame(Id=rep(file_name, dim(tab)[2]),
-                      Source=rep(file, dim(tab)[2]),
-                      shp=rep(file_path_sans_ext(basename(file)), dim(tab)[2]),
-                      Attributs=names(tab),
-                      stringsAsFactors=F)
-    df_BASE <- rbind(df_BASE,df1)
-    info <- round(i/length(Shp_FILES)*100)
+    df1 <- data.frame(
+      Id = file_name, 
+      source = file, 
+      shp = layer, 
+      Attributs = col_names, 
+      stringsAsFactors = F
+    )
+    shp_schema <- rbind(shp_schema, df1)
+    
+    
+    info <- round(i / length(list_raw_shp) * 100)
     print(file)
-    setTkProgressBar(pb, info, paste0("Lecture des tables attributaires en cours : (",info," %)"),
-                     paste0(info,"% done"))
-  } #length(Shp_FILES)
-
+    setTkProgressBar(
+      pb = pb, 
+      value = info, 
+      title = paste0("Lecture des tables attributaires en cours : (", info, " %)"), 
+      label = paste0(info, "% done")
+    )
+  } #length(list_raw_shp)
+  
   close(pb)
-
-
+  
+  
   # Tableau paramétrage pour la réécriture des shape et la construction des raster:
-  df_BASE <- mutate(df_BASE,
-                    Encodage=NA,
-                    Reecrire_SHP=NA,
-                    Union_Champ=NA,
-                    Thematique_RAS=NA, # Voir si à supprimer par la suite
-                    Commentaires=NA)
-
+  shp_schema <- 
+    shp_schema %>% 
+    mutate(
+      Encodage = NA, 
+      Reecrire_SHP = NA, 
+      Union_Champ = NA, 
+      Thematique_RAS = NA, # Voir si à supprimer par la suite
+      Commentaires = NA
+    )
+  
   # ----- Ecriture du tableau permettant de paramétrer les shapes à réécrire ou à intégrer dans le raster
-  Answer2 <- tk_messageBox(type="yesno",
-                           message="Enregistrer le classeur listant les champs des tables attributaires\n(permet de choisir les champs à inclure)?")
-  if (Answer2=="yes") {
+  answ <- tk_messageBox(
+    type = "yesno", 
+    message = "Enregistrer le classeur listant les champs des tables attributaires\n(permet de choisir les champs \u00E0 inclure)?"
+  )
+  if (answ == "yes") {
     # Création des dossiers nécessaires
-    dir.create("Out",
-               showWarnings=F)
-    dir.create("Out/Excel",
-               showWarnings=F)
-
+    output_dir <- "out/excel" # TODO : à définir comme argument d'entrée ?
+    dir.create(output_dir, showWarnings = F, recursive = T)
+    
     # Création du classeur et des feuilles nécessaires
     wb <- createWorkbook()
-    addWorksheet(wb,"Parametrage_SIG")
-
-    # Création des styles de cellules
-    Style1 <- createStyle(fontName="Arial", fontColour="black", border= "TopBottomLeftRight",
-                          fgFill="lightskyblue", textDecoration="bold", wrapText=F,
-                          valign="center",halign="center",
-                          textRotation=0)
-    Style2 <- createStyle(fontName="Arial", wrapText=T,
-                          valign="center", halign="center")
-
+    addWorksheet(wb, "Parametrage_SIG")
+    
+    # Création des styles de cellules # TODO : rassembler les styles -> faire 1 fonction pour écriture des classeurs (rassemble les différentes versions de classeur à écrire + les différents styles)
+    Style1 <- createStyle(
+      fontName = "Arial", fontColour = "black", 
+      border =  "TopBottomLeftRight", 
+      fgFill = "lightskyblue", textDecoration = "bold", wrapText = F, 
+      valign = "center", halign = "center", 
+      textRotation = 0
+    )
+    Style2 <- createStyle(
+      fontName = "Arial", wrapText = T, 
+      valign = "center", halign = "center"
+    )
+    
     # Ecriture des données dans les feuilles correspondantes
-    addStyle(wb,
-             sheet="Parametrage_SIG", Style1, rows=1, cols=1:dim(df_BASE)[2],
-             gridExpand=T)
-    addStyle(wb,
-             sheet="Parametrage_SIG", Style2, rows=1+(1:dim(df_BASE)[1]), cols=1:dim(df_BASE)[2],
-             gridExpand=T)
-
-    writeData(wb, "Parametrage_SIG", df_BASE)
-    removeColWidths(wb, sheet = "Parametrage_SIG", cols = 1:dim(df_BASE)[2])
-    setColWidths(wb, sheet = "Parametrage_SIG",
-                 cols = 1:dim(df_BASE)[2], widths=rep("auto",dim(df_BASE)[2]))
-
+    addStyle(
+      wb, 
+      sheet = "Parametrage_SIG", 
+      Style1, 
+      rows = 1, cols = 1:dim(shp_schema)[2], 
+      gridExpand = T
+    )
+    addStyle(
+      wb, 
+      sheet = "Parametrage_SIG", 
+      Style2, 
+      rows = 1 + (1:dim(shp_schema)[1]), cols = 1:dim(shp_schema)[2], 
+      gridExpand = T
+    )
+    
+    writeData(wb, "Parametrage_SIG", shp_schema)
+    removeColWidths(wb, sheet = "Parametrage_SIG", cols = 1:dim(shp_schema)[2])
+    setColWidths(
+      wb, 
+      sheet = "Parametrage_SIG", 
+      cols = 1:dim(shp_schema)[2], 
+      widths = rep("auto", dim(shp_schema)[2])
+    )
+    
     # Sauvegarde du classeur
     setwd(rep1)
-    saveWorkbook(wb,
-                 "Out/Excel/Parametres_SIG.xlsx",
-                 overwrite=T)
-    # write.xlsx(df_BASE,
-    #            file=paste0(rep1,"/Data/Excel/Table_Champs_SHP.xlsx"))
-    Msg2 <- tk_messageBox(type="ok",
-                          message=paste0("Le classeur 'Parametres_SIG.xlsx' a été écrit à l'emplacement : \n\n",
-                                         paste0(rep1,"/Out/Excel")))
+    saveWorkbook(
+      wb, 
+      file = file.path(output_dir, "Parametres_SIG.xlsx"), 
+      overwrite = T
+    )
+    # write.xlsx(shp_schema, 
+    #            file = paste0(rep1, "/Data/Excel/Table_Champs_SHP.xlsx"))
+    msg <- tk_messageBox(
+      type = "ok", 
+      message = paste0(
+        "Le classeur 'Parametres_SIG.xlsx' a \u00E9t\u00E9 \u00E9crit \u00E0 l'emplacement : \n\n", 
+        file.path(rep1, output_dir)
+      )
+    )
   }
-  out <- list(df_BASE)
+  out <- list(shp_schema)
   names(out) <- c("Parametrage_SIG")
   return(out)
-
+  
+  
+  # -- save attribute tables
   setwd(rep1)
-  save(ListShp_DF,
-       file="Tables/TablesAttributaires_SHP.RData")
+  dir.create("tables")
+  save(
+    shp_tab, 
+    file = "tables/shp_attrs_tables.Rdata" # TablesAttributaires_SHP.RData
+  )
 }
+
+
+
+#################### styles excel (ListChamps2) - 01 ####################
+# Création des styles de cellules # TODO : rassembler les styles -> faire 1 fonction pour écriture des classeurs (rassemble les différentes versions de classeur à écrire + les différents styles)
+Style1 <- createStyle(
+  fontName = "Arial", fontColour = "black", 
+  border =  "TopBottomLeftRight", fgFill = "lightskyblue", 
+  textDecoration = "bold", wrapText = F, 
+  valign = "center", halign = "center", 
+  textRotation = 0
+)
+Style2 <- createStyle(
+  fontName = "Arial", wrapText = T, 
+  valign = "center", halign = "center"
+)
+#################### / \ ####################
+
+# ----- fonction d'écriture du classeur Parametrage_SIG.xlsx
+write_wb_1 <- function(
+  df, sheet, output_dir = "out/excel"
+) {
+  # df <- shp_schema # debug
+  # sheet <- "Parametrage_SIG" # debug
+  
+  # -- création des dossiers nécessaires
+  dir.create(output_dir, showWarnings = F, recursive = T)
+  
+  # -- création du classeur et des feuilles nécessaires
+  wb <- createWorkbook()
+  addWorksheet(wb, sheet)
+  
+  # -- écriture des données
+  writeData(wb, sheet, df)
+  
+  # -- styles et mise en forme
+  # styles
+  addStyle(
+    wb, 
+    sheet = sheet, 
+    Style1, 
+    rows = 1, cols = 1:dim(df)[2], 
+    gridExpand = T
+  )
+  addStyle(
+    wb, 
+    sheet = sheet, 
+    Style2, 
+    rows = 1 + (1:dim(df)[1]), cols = 1:dim(df)[2], 
+    gridExpand = T
+  )
+  # mise en forme
+  removeColWidths(wb, sheet = sheet, cols = 1:dim(df)[2])
+  setColWidths(
+    wb, 
+    sheet = sheet, 
+    cols = 1:dim(df)[2], 
+    widths = rep("auto", dim(df)[2])
+  )
+  
+  # -- sauvegarde du classeur
+  setwd(rep1)
+  saveWorkbook(
+    wb, 
+    file = file.path(output_dir, paste0(sheet, ".xlsx")), 
+    overwrite = T
+  )
+
+  # -- message
+  msg <- tk_messageBox(
+    type = "ok", 
+    message = paste0(
+      "Le classeur '", sheet, ".xlsx' a \u00E9t\u00E9 \u00E9crit \u00E0 l'emplacement : \n\n", 
+      paste0(rep1, output_dir)
+    )
+  )
+}
+  
