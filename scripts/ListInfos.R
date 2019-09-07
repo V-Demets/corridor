@@ -18,82 +18,104 @@
 ############### Liste des couches vectorielles ###############
 ListInfos <- function() {
   # -- Définition du répertoire de travail
-  rep_Ilots <- tk_choose.dir(default=getwd(),
-                             caption="Choix du répertoire de travail")
+  rep_Ilots <- tk_choose.dir(
+    default = getwd(), 
+    caption = "Choix du r\u00E9pertoire de travail"
+  )
   setwd(rep_Ilots)
 
   # -- Choix du répertoire contenant les données vecteurs
-  rep_SHP <- tk_choose.dir(default="SIG/Vecteurs/DataBrutes", #getwd(),
-                           caption="Choix du répertoire contenant les données vecteurs brutes")
+  rep_SHP <- tk_choose.dir(
+    default = "", #getwd(), 
+    caption = "Choix du r\u00E9pertoire contenant les donn\u00E9es vecteurs brutes"
+  )
 
   # -- Récupération des fichiers contenus dans rep_SHP
-  List_DIRS <- list.dirs(path=rep_SHP)
-  List_FILES <- list.files(path=List_DIRS, full.names=T)
-  pos_rep <- str_locate(List_FILES, rep_SHP) # construction chemin relatif :
-  # supprime le chemin du répertoire de base dans le nom des fichiers
-  List_FILES <- str_sub(List_FILES, pos_rep[,2]+2,-1)
+  # List_DIRS <- list.dirs(path = rep_SHP)
+  # List_FILES <- list.files(path = List_DIRS, full.names = T)
+  # pos_rep <- str_locate(List_FILES, rep_SHP) # construction chemin relatif :
+  # # supprime le chemin du répertoire de base dans le nom des fichiers
+  # List_FILES <- str_sub(List_FILES, pos_rep[, 2] + 2, -1)
+  list_raw_files_tree <- list.files(
+    path = rep_SHP, 
+    all.files = F, 
+    recursive = T, 
+    include.dirs = T
+  ) 
 
-  df1 <- data.frame(Dir_Source=dirname(List_FILES),
-                    Source=List_FILES,
-                    # Fichier=file_path_sans_ext(List_FILES),
-                    Extent=str_sub(List_FILES,-4,-1),
-                    stringsAsFactors=F) %>%
-    filter(Extent==".shp") %>%
-    mutate(Couche=basename(Source),
-           Couche=str_sub(Couche,1,-5)) %>%
-    arrange(Couche) %>%
-    mutate(Id=factor(Source),
-           Id=as.numeric(Id),
-           Id=paste0("ID_",Id))
+  raw_files_tree <- data.frame( # df1
+    dir_source = dirname(list_raw_files_tree), 
+    source = list_raw_files_tree, 
+    # Fichier = file_path_sans_ext(list_raw_files_tree), 
+    ext = str_sub(list_raw_files_tree, -4, -1), 
+    stringsAsFactors = F
+  ) %>%
+    filter(ext == ".shp") %>%
+    mutate(
+      layer = basename(source), 
+      layer = str_sub(layer, 1, -5)
+    ) %>%
+    arrange(layer) %>%
+    mutate(
+      Id = factor(source), 
+      Id = as.numeric(Id), 
+      Id = paste0("ID_", Id)
+    )
 
-  List <- str_split(df1$Dir_Source,"/")
-  df2 <- data.frame(Id=rep.int(df1$Id, sapply(List, length)),
-                    Dir_Source=rep.int(df1$Dir_Source, sapply(List, length)),
-                    Source=rep.int(df1$Source, sapply(List, length)),
-                    Extent=rep.int(df1$Extent, sapply(List, length)),
-                    Couche=rep.int(df1$Couche, sapply(List, length)),
-                    Dossier=unlist(List),
-                    stringsAsFactors=F) %>%
-    group_by(Source) %>%
-    mutate(Niveau=1:length(Source)) %>%
-    ungroup()
+  dir_source_list <- str_split(raw_files_tree$dir_source, "/") # List
+  # names(dir_source_list) <- raw_files_tree$Id
+  
+  
+  df2 <- data.frame(
+    Id = rep.int(raw_files_tree$Id, sapply(dir_source_list, length)), 
+    # dir_source = rep.int(raw_files_tree$dir_source, sapply(dir_source_list, length)), # Dir_Source
+    source = rep.int(raw_files_tree$source, sapply(dir_source_list, length)), # Source
+    # ext = rep.int(raw_files_tree$ext, sapply(dir_source_list, length)), # Extent
+    # layer = rep.int(raw_files_tree$layer, sapply(dir_source_list, length)), # Couche
+    dir = unlist(dir_source_list), # Dossier
+    # niveau = seq()
+    stringsAsFactors = F
+  ) %>%
+    group_by(source) %>%
+    mutate(Niveau = 1:length(source)) %>%
+    ungroup() %>% 
+    select(Id, dir, Niveau) %>% 
+    left_join(raw_files_tree)
 
   # Reproduction et sauvegarde de la hiérarchie entre les fichiers/dossiers dans un data.frame (df3)
   Niveaux <- unique(df2$Niveau)
-  df3 <- mutate(df2, DirName=Source) %>%
-    group_by(Source) %>%
-    mutate(Niveau_Max=max(Niveau)) %>%
+  df3 <- mutate(df2, DirName = source) %>%
+    group_by(source) %>%
+    mutate(Niveau_Max = max(Niveau)) %>%
     ungroup()
   for (niv in Niveaux[length(Niveaux):1]) {
-    df3 <- mutate(df3,
-                  DirName=ifelse(niv <= Niveau_Max,
-                                 dirname(DirName),
-                                 DirName),
-                  Dossier=ifelse(Niveau==niv,
-                                 DirName,
-                                 Dossier))
+    df3 <- 
+      df3 %>% 
+      mutate(
+        DirName = ifelse(niv <= Niveau_Max, dirname(DirName), DirName), 
+        dir = ifelse(Niveau == niv, DirName, dir)
+      )
   }
   # Création des dossiers nécessaires dans le dossier DataProjet:
   repDataProjet <- dirname(rep_SHP) # remonter dans les dossiers pour créer DataProjet
-  repDataProjet <- paste0(repDataProjet,"/DataProjet")
-  dir.create(repDataProjet,
-             showWarnings=F)
+  repDataProjet <- paste0(repDataProjet, "/DataProjet")
+  dir.create(repDataProjet, showWarnings = F)
 
   # ---- N.B : Création des dossiers est reportée dans la fonction ReecritureShape (inutile de
   # -- créer des dossiers pour des shapes qui ne seront pas réécris)
 
   # setwd(repDataProjet)
   # for (niv in Niveaux) {
-  #   Dirs <- filter(df3, Niveau==niv) %>%
+  #   Dirs <- filter(df3, Niveau == niv) %>%
   #     dplyr::select(Dossier) %>%
   #     distinct() %>% # idem unique mais plus rapide
   #     unlist()
   #   for (dir in Dirs) {
-  #     dir.create(dir, showWarnings=F)
+  #     dir.create(dir, showWarnings = F)
   #   }
   # }
 
   infos <- list(rep_Ilots, rep_SHP, df3)
-  names(infos) <- c("repTravail","repDataBrutes","tableau")
+  names(infos) <- c("repTravail", "repDataBrutes", "tableau") # TODO : voir si mise au format df vraiment nécessaire -> se contenter de la liste des fichiers ?
   return(infos)
 }
