@@ -15,9 +15,9 @@ libraries(
 
 # ----- 1. Liste des couches disponibles (shapes) et de leur chemin -----
 res <- ListInfos()
-rep_Ilots <- res[[1]]
-repDataBrutes <- res[[2]]
-Path_DF <- res[[3]]
+rep_Ilots <- res[[1]] # repTravail
+repDataBrutes <- res[[2]] # repDataBrutes
+Path_DF <- res[[3]] # tableau # TODO : simplifier résultat fonction ListInfos -> nécessité de transformer list_raw_files_tree en data frame ?
 setwd(rep_Ilots)
 # df3 <- res[[1]]
 
@@ -27,62 +27,48 @@ setwd(rep_Ilots)
 # res1 <- ListChamps1(res[[1]], res[[2]], res[[3]])
 res1 <- ListChamps2(res[[1]], res[[2]], res[[3]])
 
-df_BASE_FILE <- tk_choose.files(
-  default = paste0(rep_Ilots, "/Out/Excel/"), 
-  caption = "Choix du classeur listant les champs des tables atributaires à conserver dans la réécriture des shapes.", 
-  multi = F, 
-  filters = matrix(c(".xlsx", ".xlsx"), nrow = 1, ncol = 2)
-)
-df_BASE <- read.xlsx(df_BASE_FILE, sheet = "Parametrage_SIG")
-ParamSHP_DF <- df_BASE
-# Ensuite l'opérateur modifie les champs à inclure ou non. Créer une table à inclure par défaut.
-# Answer3 <- tk_messageBox(type = "yesno", 
-#                          message = "Existe-t-il une version modifiée du classeur 'Parametres_SIG.xlsx' à intégrer ?")
-# if (Answer3 == "yes") {
-# df_BASE_FILE <- tk_choose.files(default = paste0(rep_Ilots, "/Data/Excel/"), 
-#                                 caption = "Choix du classeur listant les champs des tables atributaires à conserver dans la réécriture des shapes.", 
-#                                 multi = F, 
-#                                 filters = matrix(c(".xlsx", ".xlsx"), 
-#                                                nrow = 1, ncol = 2))
-df_BASE_FILE <- tk_choose.files(
-  default = paste0(rep_Ilots, "/Out/Excel/"), 
-  caption = "Choix du classeur listant les champs des tables atributaires à conserver dans la réécriture des shapes.", 
-  multi = F, 
-  filters = matrix(c(".xlsx", ".xlsx"), nrow = 1, ncol = 2)
-)
-# df_BASE <- read.xlsx(df_BASE_FILE, 
-#                      sheet = "Reecriture_SHP")
-# df_BASE2 <- read.xlsx(df_BASE_FILE, 
-#                       sheet = "Creation_Raster")
-df_BASE <- read.xlsx(df_BASE_FILE, sheet = "Parametrage_SIG")
-# } else {
-#   df_BASE <- res1[[1]]
-#   df_BASE2 <- res1[[2]]
-# }
+# df_BASE_FILE <- tk_choose.files(
+#   default = file.path(rep_Ilots, "/out/excel/"), 
+#   caption = "Choix du classeur listant les champs des tables attributaires \u00E0 conserver dans la r\u00E9\u00E9criture des shapes.", 
+#   multi = F, 
+#   filters = matrix(c(".xlsx", ".xlsx"), nrow = 1, ncol = 2)
+# )
+# 
+# df_BASE_FILE <- sub(
+#   paste0(rep_Ilots, "/"), "", df_BASE_FILE
+# )
+# df_BASE <- read.xlsx(df_BASE_FILE, sheet = "Parametrage_SIG")
+# ParamSHP_DF <- df_BASE # TODO : supprimer intermédiaire
+
+# # Ensuite l'opérateur modifie les champs à inclure ou non. Créer une table à inclure par défaut.
+# # Answer3 <- tk_messageBox(type = "yesno", 
+# #                          message = "Existe-t-il une version modifiée du classeur 'Parametres_SIG.xlsx' à intégrer ?")
+# # if (Answer3 == "yes") {
+# # df_BASE_FILE <- tk_choose.files(default = paste0(rep_Ilots, "/Data/Excel/"), 
+# #                                 caption = "Choix du classeur listant les champs des tables atributaires à conserver dans la réécriture des shapes.", 
+# #                                 multi = F, 
+# #                                 filters = matrix(c(".xlsx", ".xlsx"), 
+# #                                                nrow = 1, ncol = 2))
+# df_BASE_FILE <- tk_choose.files(
+#   default = file.path(rep_Ilots, "/out/excel/"), # TODO : gérer le default (vide ou mettre le bon nom de fichier)
+#   caption = "Choix du classeur listant les champs des tables atributaires à conserver dans la réécriture des shapes.", 
+#   multi = F, 
+#   filters = matrix(c(".xlsx", ".xlsx"), nrow = 1, ncol = 2)
+# )
+# 
+# df_BASE <- read.xlsx(df_BASE_FILE, sheet = "Parametrage_SIG")
+# # } else {
+# #   df_BASE <- res1[[1]]
+# #   df_BASE2 <- res1[[2]]
+# # }
 
 # ParamSHP_DF <- df_BASE
 # ParamRAS_DF <- df_BASE2
 
-# ----- 3. Création du classeur Parametrage (bis) avec une feuille par grand type de raster -----
-# Une fois les feuilles de chaque raster créé, il est possible d'obtenir des détails sur certains attributs
-# pour attribuer des poids différents à des valeurs différentes d'un même attribut. Mais pour cela, pour des
-# question d'encodage, il faut importer les shapes, voire corriger l'encodage à utiliser.
-df1 <- 
-  df_BASE %>% 
-  filter(!is.na(Thematique_RAS)) %>%
-  select( # dplyr::
-    Id, Source, shp, Attributs, Encodage, 
-    Reecrire_SHP, Union_Champ, Thematique_RAS, Commentaires
-  )
-# Evite de recopier que les colonnes nommées dans la feuille Parametrage_SIG
 
-ListSheet <- unique(df1$Thematique_RAS)
-ListSheet2 <- str_split(ListSheet, "/")
-ListSheet2 <- unlist(ListSheet2)
-ListSheet2 <- unique(ListSheet2)
-ListSheet2 <- c("Parametrage_SIG", ListSheet2)
-
-# Création des styles de cellules
+  
+#################### styles excel (ListChamps2) - 01 ####################
+# Création des styles de cellules # TODO : rassembler les styles -> faire 1 fonction pour écriture des classeurs (rassemble les différentes versions de classeur à écrire + les différents styles)
 Style1 <- createStyle(
   fontName = "Arial", fontColour = "black", border = "TopBottomLeftRight", 
   fgFill = "lightskyblue", textDecoration = "bold", wrapText = F, 
@@ -93,135 +79,262 @@ Style2 <- createStyle(
   fontName = "Arial", wrapText = T, 
   valign = "center", halign = "center"
 )
-
-wb <- createWorkbook()
-for (sheet in ListSheet2) {
-  # sheet <- ListSheet2[5]
-  name_sheet <- gsub(" ", "_", sheet, fixed = T)
-  sheet <- gsub("'", "", sheet, fixed = T)
-  sheet <- gsub("\u00EA", "e", sheet, fixed = T)
-  sheet <- gsub("\u00E2", "a", sheet, fixed = T)
-  sheet <- gsub("\u00E9", "e", sheet, fixed = T)
-  sheet <- gsub("\u00E8", "e", sheet, fixed = T)
-  sheet <- gsub("\u00FB", "u", sheet, fixed = T)
-  sheet <- gsub("\u00EE", "i", sheet, fixed = T)
-  sheet <- gsub("\u00F4", "o", sheet, fixed = T)
-
-  if (sheet == "Parametrage_SIG") {
-    df_temp <- df1
-  } else {
-    df_temp <- 
-      df1 %>% 
-      filter(str_detect(Thematique_RAS, sheet)) %>%
-      select(Id, Source, shp, Encodage) %>% # dplyr:: # Commentaires supprimés -> génèrent des doublons
-      distinct()
-    if (sheet == "Krigeage") {
-      df_temp <- 
-        df_temp %>% 
-        mutate(
-          Inclure_RASTER = NA, 
-          Intitule_ChampRaster = NA, 
-          Valeur_ChampRaster = NA, 
-          Buffer = NA
-        )
-    } else {
-      df_temp <- 
-        df_temp %>% 
-        mutate(
-          Buffer = NA, 
-          Distance = NA, 
-          Nbre_Niveau = NA, 
-          Poids = NA, 
-          Detail_Valeurs = NA, 
-          Valeurs = NA
-        ) # %>%
-      # select(Id, Source, shp, Encodage, Buffer, Distance, 
-      #        Nbre_Niveau, Poids, Detail_Valeurs, Valeurs, Commentaires)
-    }
-  }
-
-  addWorksheet(wb, name_sheet)
-
-  # Ecriture des données dans les feuilles correspondantes
-  addStyle(
-    wb, 
-    sheet = name_sheet,
-    Style1, 
-    rows = 1, cols = 1:dim(df_temp)[2], 
-    gridExpand = T
-  )
-  addStyle(
-    wb, 
-    sheet = name_sheet,
-    Style2, 
-    rows = 1 + (1:dim(df_temp)[1]), cols = 1:dim(df_temp)[2], 
-    gridExpand = T
-  )
-  writeData(wb, name_sheet, df_temp)
+#################### / \ ####################
+# TODO : faire une fonction pour 3.
+# ----- fonction de nettoyage des noms
+clean_names <- function(string) {
+  string <- gsub(" ", "_", string, fixed = T)
+  string <- gsub("'", "", string, fixed = T)
+  string <- gsub("\u00EA", "e", string, fixed = T)
+  string <- gsub("\u00E2", "a", string, fixed = T)
+  string <- gsub("\u00E9", "e", string, fixed = T)
+  string <- gsub("\u00E8", "e", string, fixed = T)
+  string <- gsub("\u00FB", "u", string, fixed = T)
+  string <- gsub("\u00EE", "i", string, fixed = T)
+  string <- gsub("\u00F4", "o", string, fixed = T)
   
-  removeColWidths(
-    wb, 
-    sheet = name_sheet, 
-    cols = 1:dim(df_temp)[2]
+  # retour de la fonction clean_names
+  return(string)
+}
+# ----- fonction d'écriture du classeur Parametrage_SIG_bis.xlsx
+write_wb_2 <- function(
+  df, sheet_list, 
+  output_dir = "out/excel"
+) {
+  # -- création des dossiers nécessaires
+  dir.create(output_dir, showWarnings = F, recursive = T)
+  
+  # -- création du classeur
+  wb <- createWorkbook()
+  
+  for (sheet in sheet_list) {
+    # sheet <- sheet_list[2] # debug
+    # df <- df1 # debug
+    sheet_name <- clean_names(sheet)
+    
+    wb_df <- df
+    if (sheet != "Parametrage_SIG") {
+      wb_df <- 
+        df %>% 
+        filter(str_detect(Thematique_RAS, sheet)) %>%
+        select(Id, Source, shp, Encodage) %>% # dplyr:: # Commentaires supprimés -> génèrent des doublons
+        distinct()
+      
+      col_names <- if (sheet == "Krigeage") {c(
+        "Inclure_RASTER", "Intitule_ChampRaster", 
+        "Valeur_ChampRaster", "Buffer"
+      )} else {c(
+        "Buffer", "Distance", "Nbre_Niveau",
+        "Poids", "Detail_Valeurs", "Valeurs"
+      )}
+      wb_df[, col_names] <- NA
+    }
+    
+    # -- création des feuilles nécessaires
+    addWorksheet(wb, sheet)
+    
+    # -- écriture des données
+    # writeData(wb, sheet, wb_df)
+    writeData(wb, sheet, wb_df)
+    
+    # -- styles et mise en forme
+    # styles
+    addStyle(
+      wb, 
+      sheet = sheet, 
+      Style1,
+      rows = 1, cols = 1:dim(wb_df)[2],
+      gridExpand = T
+    )
+    addStyle(
+      wb, 
+      sheet = sheet, 
+      Style2,
+      rows = 1 + (1:dim(wb_df)[1]), cols = 1:dim(wb_df)[2],
+      gridExpand = T
+    )
+    # mise en forme
+    removeColWidths(
+      wb, 
+      sheet = sheet, 
+      cols = 1:dim(wb_df)[2]
+    )
+    setColWidths(
+      wb, 
+      sheet = sheet, 
+      cols = 1:dim(wb_df)[2],
+      widths = rep("auto", dim(wb_df)[2])
+    )
+  }
+  
+  # -- sauvegarde du classeur
+  saveWorkbook(
+    wb,
+    file.path(output_dir, "Parametres_SIG_bis.xlsx"), # TODO : automatiser le nom des classeurs
+    overwrite = T
   )
-  setColWidths(
-    wb, 
-    sheet = name_sheet, 
-    cols = 1:dim(df_temp)[2], 
-    widths = rep("auto", dim(df_temp)[2])
+  
+  # -- message
+  wb_name <- "Parametres_SIG_bis"
+  msg <- tk_messageBox(
+    type = "ok", 
+    message = paste0(
+      "Le classeur '", wb_name, ".xlsx' a \u00E9t\u00E9 \u00E9crit \u00E0 l'emplacement : \n\n", 
+      output_dir
+    )
   )
 }
-saveWorkbook(
-  wb, 
-  "Out/Excel/Parametres_SIG_bis.xlsx", 
-  overwrite = T
+
+# ----- 3. Création du classeur Parametrage (bis) avec une feuille par grand type de raster -----
+# Une fois les feuilles de chaque raster créé, il est possible d'obtenir des détails sur certains attributs
+# pour attribuer des poids différents à des valeurs différentes d'un même attribut. Mais pour cela, pour des
+# question d'encodage, il faut importer les shapes, voire corriger l'encodage à utiliser.
+parameter_wb_file <- tk_choose.files(
+  default = file.path(rep_Ilots, "/out/excel/"), 
+  caption = "Choix du classeur listant les champs des tables attributaires \u00E0 conserver dans la r\u00E9\u00E9criture des shapes.", 
+  multi = F, 
+  filters = matrix(c(".xlsx", ".xlsx"), nrow = 1, ncol = 2)
 )
+
+parameter_wb_step2 <- function(
+  rep, wb_name
+) {
+  # -- extraction du chemin relatif
+  parameter_wb_file <- sub(
+    paste0(rep, "/"), "", parameter_wb_file
+  )
+  
+  # -- lecture du classeur excel
+  parameter_df <- 
+    read.xlsx(
+      parameter_wb_file, 
+      sheet = "Parametrage_SIG"
+    ) %>% 
+    filter(!is.na(Thematique_RAS)) %>% 
+    select(
+      Id, Source, shp, Attributs, Encodage, 
+      Reecrire_SHP, Union_Champ, Thematique_RAS, Commentaires
+    )
+  
+  # -- sécurité pour détecter et mentionner les shapes qui ne sont pas rangés dans une thématique
+  empty_thematique <- parameter_df %>% filter(is.na(Thematique_RAS))
+  if (dim(empty_thematique)[1] > 0) {
+    empty_nb <- length(unique(empty_thematique$Source))
+    warning("il y a ", empty_nb, " couches .shp sans 'Thematique_RAS'" )
+  }
+  
+  # -- liste des thématiques créées par l'opérateur dans le classeur Parametrage_SIG.xlsx (wb_name)
+  sheet_list <- 
+    unique(df1$Thematique_RAS) %>% 
+    str_split("/") %>% 
+    unlist() %>% 
+    unique()
+  sheet_list <- c("Parametrage_SIG", sheet_list) # TODO : replace Parametrage_SIG by argument
+  
+  # -- message de validation sur les thématiques détectées
+  msg <- tk_messageBox(
+    type = "yesno", 
+    message = paste0(
+      "A CONFIRMER :\nil y a ", 
+      length(sheet_list), 
+      " thématiques à traiter qui ont été détectées dans le classeur '",
+      file, "'"
+    ),
+    icon = "warning"
+  )
+  if (msg == "no") stop("Confirmer les thématiques détectées pour continuer")
+  
+  # -- écriture du classeur "Parametrage_SIG_bis.xlsx" (paste0(wb_name, "_bis.xlsx"))
+  write_wb_2(df1, sheet_list)
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 # ----- 4. Lecture des shapes et réécriture (réécriture à mettre en option ?) -----
 ##### Création des rasters nécessaire au krigeage des données ###
-Buffer_Width = 1000
+
 # --- Choix du fichier d'emprise ---
-# Zone_FILE <- tk_choose.files(default = "SIG/Vecteurs/Perimetre2014.shp", #getwd(), 
-#                              caption = "Choix du shape d'emprise permettant de clipper et de reprojeter les différents shp", 
-#                              multi = F, 
-#                              filters = matrix(c(".shp", ".shp"), 
-#                                             nrow = 1, ncol = 2))
+zone_file <- tk_choose.files( # zone_file = Zone_FILE
+  default = "", #getwd(),
+  caption = "Choix du shape d'emprise permettant de clipper et de reprojeter les diff\u00E9rents shp",
+  multi = F,
+  filters = matrix(c(".shp", ".shp"), nrow = 1, ncol = 2)
+)
+zone_file <- "data/raw/Perimetres/Perimetre2014.shp" # debug
 
-Zone_FILE <- "/Users/Valentin/Foret/Travail/PNRVN/Ilots_PNRVN/Data/SIG/Vecteurs/DataBrutes/Perimetres/Perimetre2014.shp"
-Zone_SHP <- readOGR(
-  dsn = dirname(Zone_FILE), 
-  layer = file_path_sans_ext(basename(Zone_FILE)), 
-  verbose = F, 
-  stringsAsFactors = F
-) %>%
-  spTransform(CRS("+init = epsg:2154")) # Forcer la couche d'emprise en L_93 ou laisser le choix ?
+zone <- 
+  zone_file %>% 
+  st_read(stringsAsFactors = FALSE, quiet = T)
+# -- sécurités
+if (is.na( st_crs(zone)["proj4string"] )) {
+  stop("Aucune projection disponible pour le shape du périmètre (zone)")
+}
+if (is.na( st_crs(zone)["epsg"] )) {
+  zone <- st_transform(zone, crs = 2154)
+}
+  
+# zone <- readOGR( # zone = Zone_SHP
+#   dsn = dirname(zone_file), 
+#   layer = file_path_sans_ext(basename(zone_file)), 
+#   verbose = F, 
+#   stringsAsFactors = F
+# ) %>%
+#   spTransform(CRS("+init = epsg:2154")) # Forcer la couche d'emprise en L_93 ou laisser le choix ?
 
-if (is.null(Zone_SHP) | class(Zone_SHP)[1] != "SpatialPolygonsDataFrame") {
-  stop("Fichier d'emprise incorrect : (is.null(Zone_SHP) | class(Zone_SHP)[1] != 'SpatialPolygonsDataFrame'")
+# if (is.null(zone) | class(zone)[1] != "SpatialPolygonsDataFrame") {
+#   stop("Fichier d'emprise incorrect : (is.null(zone) | class(zone)[1] != 'SpatialPolygonsDataFrame'")
+# }
+if (is.null(zone) | class(zone)[1] != "sf") {
+  stop("Fichier d'emprise incorrect : (is.null(zone) | class(zone)[1] != 'sf'")
 }
 # --- Rajout du buffer au périmètre d'étude ---
-zone <- gBuffer(Zone_SHP, width = Buffer_Width)
+buffer_width = 1000 # buffer_width = Buffer_Width
+# zone <- gBuffer(zone_shp, width = Buffer_Width)
+zone_expanded <- st_buffer(zone, dist = buffer_width) # zone_expanded = zone
 
-# --- Tableau si système de projection manquant ---
-df_EPSG <- data.frame(
-  Label = c(
-    "EPSG:2154 - RGF93/Lambert-93", 
-    "EPSG:7421 - NTF(Paris)/Lambert Zone II", 
-    "EPSG:4326 - WGS84 (gps)", 
-    "EPSG:32632 - UTM 32N (gps téléphone)"
-  ), 
-  EPSG = c(2154, 7421, 4326, 32632), 
-  stringsAsFactors = F
-)
+# ----- tableau pour système de projection manquant (ReecritureShape2.R)
+# EPSG_df <- data.frame(
+#   Label = c(
+#     "EPSG:2154 - RGF93/Lambert-93", 
+#     "EPSG:7421 - NTF(Paris)/Lambert Zone II", 
+#     "EPSG:4326 - WGS84 (gps)", 
+#     "EPSG:32632 - UTM 32N (gps téléphone)"
+#   ), 
+#   EPSG = c(2154, 7421, 4326, 32632), 
+#   stringsAsFactors = F
+# )
 
-ParamSIG_FILE <- "/Users/Valentin/Foret/Travail/PNRVN/Ilots_PNRVN/Out/Excel/Parametres_SIG_bis_V3.xlsx"
+# ParamSIG_FILE <- "/Users/Valentin/Foret/Travail/PNRVN/Ilots_PNRVN/Out/Excel/Parametres_SIG_bis_V3.xlsx"
+parameter_wb_file <- "out/excel/Parametres_SIG_bis_V3.xlsx" # debug
 
 # --- Lecture des shapes et réécriture (réécriture à mettre en option ?) ---
+# system.time(
+#   ReecritureShape(
+#     zone_shp = Bbox_SHP, 
+#     ParamSIG_FILE, 
+#     repDataBrutes = repDataBrutes, 
+#     Buffer_Width = 1000, 
+#     Path_DF
+#   )
+# )
+
+# Bbox_SHP = zone
 system.time(
   ReecritureShape(
-    Zone_SHP = Bbox_SHP, 
-    ParamSIG_FILE, 
+    zone_shp = zone, 
+    parameter_wb_file, 
     repDataBrutes = repDataBrutes, 
     Buffer_Width = 1000, 
     Path_DF
@@ -1259,10 +1372,8 @@ Plac_SHP <- Plac_SHP[shpForest_SHP, ]
 extract_raster3 <- raster::extract(raster3, PlacCalib_SHP@coords, df = TRUE)
 # Jonction des données extraites avec la couche spatialisée placettes
 # a <-
-PlacCalib_SHP@data <- cbind(PlacCalib_SHP@data, 
-                            extract_raster3)
-PlacCalib_SHP <- spTransform(PlacCalib_SHP, 
-                             CRS("+init = epsg:2154"))
+PlacCalib_SHP@data <- PlacCalib_SHP@data %>% cbind(extract_raster3)
+PlacCalib_SHP <- spTransform(PlacCalib_SHP, CRS("+init = epsg:2154"))
 
 # Sécurité si valeurs vides :
 pos_NA <- c()
@@ -1289,11 +1400,12 @@ if (length(pos_NA) > 0) {
 Objet <- "Vha"
 
 # Version sans boucle (uniquement 'Vha' considéré)
-PlacCalib_SHP <- PlacCalib_SHP[, c("Vha", "mnh", "hdr", "Peuplt_IFN", "SER", "Geologie")] # , "Peuplt_IFN", "Station_Forestiere" #, "Station_Forestiere", "SER", "Geologie"
+PlacCalib_SHP <- 
+  PlacCalib_SHP %>% 
+  select(Vha, mnh, hdr, Peuplt_IFN, SER, Geologie) # , Peuplt_IFN, Station_Forestiere #, Station_Forestiere, SER, Geologie
 # PlacCalib_SHP <- PlacCalib_SHP[!is.na(PlacCalib_SHP$Vha), c("Vha", "mnh", "hdr", "Peuplt_IFN", "Station_Forestiere", "SER", "Geologie")]
 
-PlacCalib_SHP <- spTransform(PlacCalib_SHP, 
-                             CRS("+init = epsg:2154"))
+PlacCalib_SHP <- spTransform(PlacCalib_SHP, CRS("+init = epsg:2154"))
 
 # Sécurité si valeurs vides :
 pos_NA <- c()
@@ -1322,8 +1434,11 @@ if (length(pos_NA) > 0) {
 # Aires_Protection = ifelse(is.na(Aires_Protection), 
 #                   0, Aires_Protection))
 
-formula <- paste(Objet, " ~  Peuplt_IFN + mnh + hdr + SER + Geologie", # + Aires_Protection   #+ SER + Geologie
-                 sep = "") #  + Peuplt_IFN + Station_Forestiere
+formula <- paste(
+  Objet, 
+  " ~  Peuplt_IFN + mnh + hdr + SER + Geologie", # + Aires_Protection   #+ SER + Geologie
+  sep = ""
+) #  + Peuplt_IFN + Station_Forestiere
 # PlacCalib_SHP2 <- PlacCalib_SHP[, c("Vha", "mnh", "hdr", "Peuplt_IFN", "SER", "Geologie")] # , "Peuplt_IFN", "Station_Forestiere", "Aires_Protection"
 
 
@@ -1334,9 +1449,9 @@ res <- 20
 ext <- extent(Bbox_SHP)
 
 x_min <- floor(ext[1])
-x_max <- x_min + floor((ext[2]-ext[1])/res)*res
+x_max <- x_min + floor((ext[2] - ext[1]) / res) * res
 y_min <- floor(ext[3])
-y_max <- y_min + floor((ext[4]-ext[3])/res)*res
+y_max <- y_min + floor((ext[4] - ext[3]) / res) * res
 #Spatialisation du grid
 grd <- expand.grid(x = seq(x_min, x_max, by = res), y = seq(y_min, y_max, by = res))
 coordinates(grd) <- ~ x + y
@@ -1360,11 +1475,14 @@ grd@proj4string <- CRS("+init = epsg:2154")
 # PlacCalib_SHP2 <- PlacCalib_SHP[, c("Vha", "mnh", "hdr", "Peuplt_IFN", "SER", "Geologie")]
 vr <- variogram(as.formula(formula), data = PlacCalib_SHP, cutoff = 800, width = 70)
 plot(vr)
-vrmf <- fit.variogram(vr, 
-                      vgm(psill = 300, 
-                          model = "Sph", 
-                          # range = 6000, 
-                          nugget = 0))
+vrmf <- fit.variogram(
+  vr, 
+  vgm(
+    psill = 300, model = "Sph", 
+    # range = 6000, 
+    nugget = 0
+  )
+)
 plot(vr, vrmf)
 # ----- Interpolation
 kr <- krige(as.formula(formula), locations = PlacCalib_SHP, newdata = grd, model = vrmf)
@@ -1372,18 +1490,24 @@ kr@data$var1.pred[which(kr@data$var1.pred < 0)] <- 0
 #Transformation d'un SpatialPointDataFrame en SpatialGridDataFrame
 gridded(kr) <- TRUE
 #Rasterisation
-kr_rast <- SpatialPixelsDataFrame(points = kr@coords, data = kr@data, 
-                                  proj4string = CRS("+init = epsg:2154"))
+kr_rast <- SpatialPixelsDataFrame(
+  points = kr@coords, data = kr@data, 
+  proj4string = CRS("+init = epsg:2154")
+)
 kr_rast <- raster(kr_rast)
 krVha_rast <- kr_rast
-writeRaster(krVha_rast, 
-            file = "Out/SIG/Raster/Krigeage/Vha_HET", 
-            format = "GTiff", 
-            overwrite = T)
+writeRaster(
+  krVha_rast, 
+  file = "Out/SIG/Raster/Krigeage/Vha_HET", 
+  format = "GTiff", 
+  overwrite = T
+)
 
 # ----- 15. Test vérification krigeage Vha de HET : -----
 #Extraction des données du krigeage au niveau des placettes (raster)
-extract_kr <- raster::extract(krVha_rast, PlacValid_SHP@coords, df = TRUE, buffer = 30, fun = mean)
+extract_kr <- raster::extract(
+  krVha_rast, PlacValid_SHP@coords, df = TRUE, buffer = 30, fun = mean
+)
 extract_kr <- extract_kr[, 2]
 # Simplification des donn?es des placettes de validation
 # PlacValid_SHP <- Plac_SHP[echant, ]
