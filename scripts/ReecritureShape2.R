@@ -22,22 +22,64 @@
 #'
 #' @export
 
+library(openxlsx)
+library(sf)
+library(stats) # TODO : à charger avant dplyr (fonction 'filter' et 'lag' masquées sinon)
+library(dplyr)
+library(tcltk)
 
-ReecritureShape <- function(
-  Zone_SHP, 
-  ParamSIG_FILE, 
-  repDataBrutes = paste0(getwd(), "/Data/SIG/Vecteurs/DataBrutes"), 
-  # Buffer_Width = 1000, 
-  Path_DF
+# -- fonction de sauvegarde des shapes lus
+save_read_shp <- function(shp, id_shp, read_shp) {
+  # TODO : voir si possible de supprimer id_shp ?
+  
+  # separate sf object between id and values (+ geometry) - à voir si scinder en plus de morceaux ?
+  values_sf <- 
+    shp %>% 
+    gather(variable, value, -geometry) %>% 
+    mutate(id_sf = id_shp) %>% 
+    select(id_sf, variable, value, geometry)# %>% 
+  # # TODO : add id for sfg ?
+  # group_by(id_sf, geometry) %>% 
+  # mutate(id_sfg = 1:length(id_sfg)) %>% 
+  # # Erreur : Column `geometry` can't be used as a grouping variable because it's a sfc_POLYGON/sfc
+  # ungroup() %>% 
+  # mutate(id_sfg = paste0(id_sf, id_sfg))
+  id_sf <- 
+    values_sf %>% 
+    select(id_sf) %>% 
+    st_drop_geometry() %>% 
+    distinct()
+  
+  # -- sauvegarde des données dans la liste read_shp
+  if (length(read_shp) == 0) {
+    read_shp[[1]] <- id_sf
+    read_shp[[2]] <- values_sf
+  } else {
+    read_shp[[1]] <- rbind(read_shp[[1]], id_sf)
+    read_shp[[2]] <- rbind(read_shp[[2]], values_sf)
+  }
+  
+  # -- noms de la liste read_shp
+  names(read_shp)[1] <- "id_sf"
+  names(read_shp)[2] <- "values_sf"
+  
+  # -- retour de la fonction read_shp
+  return(read_shp)
+}
+
+rewrite_shp <- function(
+  zone, parameter_wb_file, 
+  rep
 ) {
-  Zone_SHP <- zone # debug # zone = Zone_SHP
-  ParamSIG_FILE <- parameter_wb_file # debug # parameter_wb_file = ParamSIG_FILE
-  raw_data_rep = rep2 # debug # raw_data_rep = repDataBrutes
-  # buffer_width = 1000 # debug # buffer_width = Buffer_Width TODO : suppress param
-  # Zone_SHP <- Bbox_SHP
-  # ParamSIG_FILE <- df_BASE
-  # ParamSIG_FILE <- "/Users/Valentin/Foret/Travail/PNRVN/Ilots_PNRVN/Out/Excel/Parametres_SIG_bis_V2.xlsx"
-  compiled_data_rep <- sub("raw", "compiled", rep2) # debug # compiled_data_rep = repDataProjet
+  # zone <- zone # debug # zone = Zone_SHP
+  # parameter_wb_file <- parameter_wb_file # debug # parameter_wb_file = ParamSIG_FILE
+  # raw_data_rep = rep2 # debug # raw_data_rep = repDataBrutes
+  # # buffer_width = 1000 # debug # buffer_width = Buffer_Width TODO : suppress param
+  # # Zone_SHP <- Bbox_SHP
+  # # ParamSIG_FILE <- df_BASE
+  # # ParamSIG_FILE <- "/Users/Valentin/Foret/Travail/PNRVN/Ilots_PNRVN/Out/Excel/Parametres_SIG_bis_V2.xlsx"
+  raw_data_rep = file.path(getwd(), "data/raw")
+  compiled_data_rep <- sub("raw", "compiled", raw_data_rep) # debug # compiled_data_rep = repDataProjet
   
   # -- tableau pour système de projection manquant (ReecritureShape2.R) # TODO : mettre ces données dans une archive (comme les styles ?)
   EPSG_df <- data.frame(
@@ -51,202 +93,136 @@ ReecritureShape <- function(
     stringsAsFactors = F
   )
   
-  
   # -- création des dossiers nécessaires
   dir.create(compiled_data_rep, showWarnings = F, recursive = T)
   dir.create("tables", showWarnings = F) # TODO : dossier déjà créé dans write_wb_1
 
-
   # ----- Import des paramètres du classeur 'Parametres_SIG.xslx' -----
-  # ParamSIG_DF <- df_BASE
   parameter_df <- read.xlsx( # parameter_df = ParamSIG_DF
     parameter_wb_file, sheet = "Parametrage_SIG"
     ) %>% 
     filter(Reecrire_SHP == "Oui" | !is.na(Thematique_RAS))
+  ########## TODO : changer Id en id, Source en source, etc. ##########
   # shp_df <- 
   #   ParamSIG_DF %>% 
   #   distinct(Id, shp)
   # ListShp_SHP <- shp_df$shp # TODO : étape déjà fait dans ListInfos.R (list_raw_shp)
   # names(ListShp_SHP) <- shp_df$Id
   # TODO : changer Id en id, Source en source, etc.
+  ########## / \ ##########
   df <- parameter_df %>% select(Id, Source) %>% arrange(Id) %>% distinct()
-  shp_list <- df$Source ; names(list_shp) <- df$Id
-  list_shp <- list_shp[1:3] # debug
-  # shp_list = ListShp_SHP
-
-  # ----- Import des chemins relatifs des différentes couches SIG -----
-  # Path_DF <- res[[3]]
+  list_shp <- df$Source ; names(list_shp) <- df$Id
+  list_shp <- list_shp[c(1:3, which(names(list_shp) == "ID_36"))] # debug
 
   # ----- Début chaîne travail sur shapes -----
   error_list <- c()
   error_list2 <- c()
-  # ListShp_SHP3 <- c() # List_SHP3 accueille tous les shapes lus (y compris ceux de ListShp_SHP2)
 
+  # -- ensemble de sauvegarde des shapes lus
   read_shp <- c()
 
+  # -- barre de progression
   pb <- tkProgressBar(
     title = "Progression", 
     label = "Réécriture des shapes (%)", 
     min = 0, max = 100, width = 500
   )
 
+  # -- boucle de lecture+réécriture des shapes
   for (i in 1:length(list_shp)) {
-    # -- paramètres récupérés dans Path_DF et parameter_df :
-    # Lecture du shape :
+    # -- paramètres récupérés dans parameter_df :
     # i = 1 # debug
-    shp_name <- unname(list_shp[i])
-    shp_name <- sub(".dbf", ".shp", shp_name)
-    shp_name <- basename(shp_name)
-    shp_id <- names(list_shp)[i]
-    df0 <- parameter_df %>% filter(Id %in% shp_id)
-    shp_source <- unique(df0$Source)
-    shp_source <- sub(".dbf", ".shp", shp_source)
-    shp_encoding <- unique(df0$Encodage)
-    df0 <- df0 %>% filter(Reecrire_SHP == "Oui")
-    shp_attrs <- unique(df0$Attributs)
-    shp_union <- unique(df0$Union_Champ) %>% na.omit()
+    # print(i) # debug
+    name_shp <- unname(list_shp[i])
+    name_shp <- sub(".dbf", ".shp", name_shp) # TODO : change .dbf en .shp ?
+    name_shp <- basename(name_shp)
+    id_shp <- names(list_shp)[i]
+    # print(id_shp) # debug
+    df <- parameter_df %>% filter(Id %in% id_shp)
+    source_shp <- unique(df$Source)
+    source_shp <- sub(".dbf", ".shp", source_shp)
+    # encoding_shp <- unique(df$Encodage)
+    df <- df %>% filter(Reecrire_SHP == "Oui")
+    attrs_shp <- unique(df$Attributs)
+    union_shp <- unique(df$Union_Champ) %>% na.omit()
     
-    # -- sécurité # TODO : renforcer les tests (si shp_id, source ou encoding > 1 ?) -> faire une fonction pour détecter les erreurs ?
-    # shp_attrs <- shp_attrs[1] # debug
-    if (length(shp_union) > 1) {
+    # -- sécurité # TODO : renforcer les tests (si id_shp, source ou encoding > 1 ?) -> faire une fonction pour détecter les erreurs ?
+    # attrs_shp <- attrs_shp[1] # debug
+    if (length(union_shp) > 1) {
       stop(
         "Plus d'un champ indiqué pour fusionner les polygones du shapes pour le fichier :\n\n", 
-        shp_source
+        source_shp
       )
     }
 
-    # -- Possibilité que shp déjà lu pendant exécution de la fonction CreateRaster()
-    # if (shp_id %in% names(ListShp_SHP2)) {
-    #   shp <- ListShp_SHP2[[which(names(ListShp_SHP2) %in% shp_id)]]
+    ########## TODO : shape déjà lu ##########
+    # -- possibilité que shp déjà lu pendant exécution de la fonction CreateRaster()
+    # if (id_shp %in% names(ListShp_SHP2)) {
+    #   shp <- ListShp_SHP2[[which(names(ListShp_SHP2) %in% id_shp)]]
     # } else {
       # print("Controle passage")
       # -- Lecture # TODO : voir s'il y a un problème possible avec l'encodage ?
+    ########## / \ ##########
     shp <- st_read(
-      file.path(raw_data_rep, "/", shp_source),
+      file.path(raw_data_rep, "/", source_shp),
       stringsAsFactors = FALSE, quiet = T
     ) %>% 
       st_transform(crs = 2154) %>%   # TODO : à tester (que faire de la sécurité ci-dessous - Contrôle du système de projection)
       st_zm(drop = T, what = "ZM") # sécurité si 3D shapefile (not supported by st_write)  # TODO : Note : écriture peut bloquer si shapefile est 3D (XYZ)
-      # if (is.na(shp_encoding)) {
-      #   shp <- readOGR(dsn = paste0(repDataBrutes, "/", dirname(shp_source)),
-      #                  layer = file_path_sans_ext(basename(shp_source)),
-      #                  verbose = F,
-      #                  stringsAsFactors = F)
-      # } else {
-      #   shp <- readOGR(dsn = paste0(repDataBrutes, "/", dirname(shp_source)), 
-      #                  layer = file_path_sans_ext(basename(shp_source)), 
-      #                  verbose = F, 
-      #                  stringsAsFactors = F, 
-      #                  use_iconv = TRUE, encoding = shp_encoding)
-      # }
 
-
-    # # -- Sauvegarde des tables attributaires
-    # ListShp_DF <- c(ListShp_DF, list(shp@data))
-    # names(ListShp_DF)[i] <- shp_id
-
-      # -- Contrôle du système de projection (Lambert 93 demandé)
-      # if (is.na( st_crs(zone)["proj4string"] )) {
-      #   msg <- tk_messageBox(
-      #     type = "ok", 
-      #     message = paste0(
-      #       "Aucun système de projection renseigné pour le shape :\n\n", 
-      #       shp_source, 
-      #       "\n\nCliquer sur OK et choisir le système de projection parmi la sélection proposée"
-      #     )
-      #   )
-      #   answ <- tk_select.list(
-      #     title = "Choix du système de projection", 
-      #     choices = EPSG_df$Label,# EPSG_df = df_EPSG
-      #     preselect = "EPSG:2154 - RGF93/Lambert-93", 
-      #     multiple = F
-      #   )
-      #   EPSG <- with(EPSG_df, EPSG[match(answ, Label)] )
-      #   # proj4string(shp) <- CRS(paste0("+init = epsg:", EPSG)) # Attribution d'un système de projection au shp
-      #   shp <- shp %>% st_transform(crs = EPSG)
-      # }
-    # }
-
-    # ----- Reprojection et crop -----
-    # TODO : suppress
-    # shp <- spTransform(shp, 
-    #                    CRS("+init = epsg:2154"))
-
-    # TODO : suppress
-    # Return <- tryCatch(shp[zone, ], 
-    #                    error = function(cond) {
-    #                      List_ERROR <- c(List_ERROR, 
-    #                                      shp_source)
-    #                      shp <- gBuffer(shp, byid = TRUE, width = 0) # permet d'éliminer les erreurs typologique +
-    #                      # argument byid = T permet de garder les données associés
-    #                      shp <- shp[zone, ]
-    #                      return(list(Shape = shp, 
-    #                                  Error = List_ERROR))
-    #                    })
+    # -- crop du shape sur la zone d'emprise
     return <- tryCatch( # return = Return
-      shp[zone, ], # TODO : regarder fonction rapide pour crop (stars ?)
+      # shp[zone, ], # TODO : regarder fonction rapide pour crop (stars ?)
+      st_intersection(zone, shp),
       error = function(cond) {
-        error_list <- c(error_list, shp_source) # error_list = List_ERROR
+        error_list <- c(error_list, source_shp) # error_list = List_ERROR
         shp <- st_buffer(shp, dist = 0) # permet d'éliminer les erreurs typologiques +
         # argument byid = T permet de garder les données associés TODO : tester avec sf (= plus aucun argument byid)
-        shp <- shp[zone, ]
+        # shp <- shp[zone, ]
+        st_intersection(zone, shp)
         return(list(shape = shp, error = error_list))
       }
     )
 
+    ########## TODO : revoir sécurité ##########
     # TODO : revoir sécurité
     # if (class(return) == "list" & length(return) == 2) { # impératif de contrôler la classe
     #   shp <- return[[which(names(return) == "shape")]]
     #   error_list <- return[[which(names(return) == "error")]]
     # } else {
-      shp <- return
+      # shp <- return
     # }
+    ########## / \ ##########
+    shp <- return
 
-    # -- Sauvegarde des tables attributaires
-    # ListShp_DF <- c(ListShp_DF, list(shp@data))
-    # names(ListShp_DF)[i] <- shp_id
-    read_shp <- c(read_shp, shp) # shp_list = ListShp_DF
-    names(read_shp)[i] <- shp_id
+    # -- sauvegarde des shapes lus
+    # read_shp <- c(read_shp, list(shp)) # read_shp = ListShp_DF # TODO : create a BD (ou GeoPackage ?)
+    # names(read_shp)[i] <- id_shp
+    read_shp <- save_read_shp(shp, id_shp, read_shp)
 
-    # ----- Ecriture du shape corrigé -----
+    # -- ecriture du shape corrigé/cropped
     # if (length(shp) != 0) { # Contrôle que la couche croise bien au moins 1 fois la zone d'étude
-    if (dim(shp) != 0) { 
+    if (dim(shp)[1] != 0) { 
 
-      # if (!is.null(shp_attrs) & length(shp_attrs)) {
+      ########## TODO : utilité ? ##########
+      # if (!is.null(attrs_shp) & length(attrs_shp)) {
       #   # -- Subset des attributs à conserver # TODO : utilité ?
-      #   shp <- shp[, shp_attrs]
+      #   shp <- shp[, attrs_shp]
       # }
       # -- Fusion des shapes selon 1 champ (si indication existe)
-      # if (length(shp_union) != 0) { # TODO : à tester
+      # if (length(union_shp) != 0) { # TODO : à tester
       #   shp_df <- shp@data %>%
-      #     distinct_(shp_union, .keep_all = T)
-      #   row.names(shp_df) <- as.character(shp_df[, shp_union]) # value sert d'identifiant
-      #   # Encoding(shp@data[, shp_union])
+      #     distinct_(union_shp, .keep_all = T)
+      #   row.names(shp_df) <- as.character(shp_df[, union_shp]) # value sert d'identifiant
+      #   # Encoding(shp@data[, union_shp])
       # 
-      #   shp <- gUnaryUnion(shp, id = shp@data[, shp_union]) # nécessaire de récupérer le data.frame
+      #   shp <- gUnaryUnion(shp, id = shp@data[, union_shp]) # nécessaire de récupérer le data.frame
       #   shp <- SpatialPolygonsDataFrame(shp, shp_df, match.ID = T) # match les row.names et les ID des polygones
       # }
+      ########## / \ ##########
 
-
-
-      # -- Création des dossiers nécessaires
-      # # setwd(compiled_data_rep)
-      # df <- Path_DF %>% filter(Id %in% shp_id)
-      # Niveaux <- df$Niveau
-      # dir_OUT <- unique(df$dir_source)
-      # for (niv in Niveaux) {
-      #   # niv <- Niveaux[1]
-      #   Dirs <- filter(df, Niveau == niv) %>%
-      #     dplyr::select(dir) %>%
-      #     distinct() %>% # idem unique mais plus rapide
-      #     unlist()
-      #   for (dir in Dirs) {
-      #     # dir <- Dirs[1]
-      #     dir.create(paste0(compiled_data_rep, "/", dir), showWarnings = F)
-      #   }
-      # }
       # -- création des dossiers nécessaires
-      save_path <- file.path(compiled_data_rep, dirname(shp_source)) # chemin
+      save_path <- file.path(compiled_data_rep, dirname(source_shp)) # chemin
       dir.create(
         save_path, showWarnings = F, recursive = T
       )
@@ -254,27 +230,24 @@ ReecritureShape <- function(
       # -- Ecriture du shape
       # reptemp <- paste(compiled_data_rep, dir_OUT, sep = "/")
       st_write(
-        shp, dsn = save_path, layer = shp_name, 
-        driver = "ESRI Shapefile",
-        delete_layer = T, delete_dsn = T
+        shp, dsn = save_path, layer = name_shp, 
+        driver = "ESRI Shapefile", quiet = T,
+        update = TRUE, delete_layer = TRUE
       )
-      # writeOGR(shp, dsn = save_path, layer = shp_name, 
-      #          driver = "ESRI Shapefile", encoding = "UTF-8", overwrite_layer = T)
-
-      # Sauvegarde des shapes lus et validés :
-      # ListShp_SHP3 <- c(ListShp_SHP3, shp) # TODO : à supprimer. déjà sauvegardé avec read_shp
-      # names(ListShp_SHP3)[length(ListShp_SHP3)] <- shp_id # TODO : à supprimer. déjà sauvegardé avec read_shp
+      # st_write(zone, dsn = file.path(save_path, 'nc.gpkg')) # TODO : tests avec objet gpkg
+      # st_write(zone, dsn = file.path(save_path, 'nc2.gpkg'), layer = 'zone', quiet = TRUE)
     } else {
-      error_list2 <- c(error_list2, shp_source)
+      error_list2 <- c(error_list2, source_shp)
     }
 
-    info <- round(i / length(shp_list) * 100)
+    info <- round(i / length(list_shp) * 100)
     setTkProgressBar(
       pb, info, paste0("Réécriture des shapes en cours : (", info, " %)"), 
       paste0(info, "% done")
     )
   }
 
+  # -- bilan des erreurs topologiques (polygones vides ? - TODO : vérifier fonctionnement)
   if (length(error_list) > 0) {
     msg <- tk_messageBox(
       type = "ok", 
@@ -286,6 +259,7 @@ ReecritureShape <- function(
     )
   }
 
+  # -- bilan des erreurs d'emprise (polygones hors zone d'étude - TODO : vérifier fonctionnement)
   if (length(error_list2) > 0) {
     msg <- tk_messageBox(
       type = "ok", 
@@ -296,28 +270,14 @@ ReecritureShape <- function(
       )
     )
   }
+  
+  # -- message
   msg <- tk_messageBox(
     type = "ok", 
     message = "Réécriture des shapes terminée."
   )
   close(pb)
 
-  # # ----- Extraction et Sauvegarde des tables attributaires
-  # ListShp_DF <- c()
-  # for (i in 1:length(ListShp_SHP3)) {
-  #   shp <- ListShp_SHP3[[i]]
-  #   id_shp <- names(ListShp_SHP3)[i]
-  #   print(id_shp)
-  #   ListShp_DF <- c(ListShp_DF, list(shp@data))
-  #   names(ListShp_DF)[i] <- id_shp
-  # }
-
-  # # Sauvegarde des shapes lus :
-  # save(ListShp_SHP3, 
-  #      file = "Tables/Shapes_ReecritureShape2.RData")
-  # # Sauvegarde des tables attributaires des shapes lus :
-  # save(ListShp_DF, 
-  #      file = "Tables/ShapesDF_ReecritureShape2.RData")
   # -- sauvegarde des shapes lus
   save(read_shp, file = "tables/read_shapes.Rdata")
 }
