@@ -6,12 +6,13 @@
 ########## Initialisation ##########
 # ----- Chargement des packages nécessaires
 library(easypackages)
-libraries(
-  "tcltk", "openxlsx", "tools", "stringr", "dplyr", "reshape2", "Corridor", 
-  
-  "raster", "rgeos", "maptools", "ggplot2", "gdata", "gstat", "sp", "rgdal", "gstat", 
-  "PermGF", "PermPSDRF"
-)
+# libraries(
+#   "tcltk", "openxlsx", "tools", "stringr", "dplyr", "reshape2", "Corridor", 
+#   
+#   "raster", "rgeos", "maptools", "ggplot2", "gdata", "gstat", "sf", "rgdal", "gstat", 
+#   "PermGF", "PermPSDRF"
+# )
+
 
 # ----- 1. Liste des couches disponibles (shapes) et de leur chemin -----
 res <- ListInfos()
@@ -67,7 +68,7 @@ res1 <- ListChamps2(res[[1]], res[[2]], res[[3]])
 
 
   
-#################### styles excel (ListChamps2) - 01 ####################
+#################### styles excel (ListChamps2) - checked till 5. ####################
 # Création des styles de cellules # TODO : rassembler les styles -> faire 1 fonction pour écriture des classeurs (rassemble les différentes versions de classeur à écrire + les différents styles)
 Style1 <- createStyle(
   fontName = "Arial", fontColour = "black", border = "TopBottomLeftRight", 
@@ -79,6 +80,7 @@ Style2 <- createStyle(
   fontName = "Arial", wrapText = T, 
   valign = "center", halign = "center"
 )
+
 #################### / \ ####################
 # TODO : faire une fonction pour 3.
 # ----- fonction de nettoyage des noms
@@ -199,6 +201,7 @@ parameter_wb_file <- tk_choose.files(
 parameter_wb_step2 <- function(
   rep, wb_name
 ) {
+  # rep <- rep1 # debug
   # -- extraction du chemin relatif
   parameter_wb_file <- sub(
     paste0(rep, "/"), "", parameter_wb_file
@@ -331,16 +334,21 @@ parameter_wb_file <- "out/excel/Parametres_SIG_bis_V3.xlsx" # debug
 # )
 
 # Bbox_SHP = zone
+# system.time(
+#   ReecritureShape(
+#     zone_shp = zone, 
+#     parameter_wb_file, 
+#     repDataBrutes = repDataBrutes, 
+#     Buffer_Width = 1000, 
+#     Path_DF
+#   )
+# )
 system.time(
-  ReecritureShape(
-    zone_shp = zone, 
-    parameter_wb_file, 
-    repDataBrutes = repDataBrutes, 
-    Buffer_Width = 1000, 
-    Path_DF
+  rewrite_shp(
+    zone, parameter_wb_file, 
+    rep = rep1
   )
 )
-
 
 
 
@@ -351,170 +359,265 @@ system.time(
 # ----- 5. Réécriture du classeur ParamSIG_FILE si besoin de détails sur certains attributs -----
 # Possibilité de refaire tourner l'édition du classeur indéfiniment
 # N.B : dplyr moins performant que merge ici !!
-load("Tables/ShapesDF_ReecritureShape2.RData")
+# load("Tables/ShapesDF_ReecritureShape2.RData")
+# TODO : faire en sorte d'updater l'archive read_shapes.Rdata (évite de gérer un objet (read_shp) trop gros en ajoutant au fur et à mesure des shapes)
+# TODO : mettre une option pour savoir si on veut vraiment réécrire les shapes (pas utile si on peut y accéder sous une autre forme)
+load("tables/read_shapes.Rdata")
 
 # --- Fichier contenant les paramètres (vrai nom dansla fonction = Parametrage_SIG) ---
 # ParamSIG_FILE <- "/Users/Valentin/Foret/Travail/PNRVN/Ilots_PNRVN/Out/Excel/Parametres_SIG_bis_V2.xlsx"
 # ParamSIG_FILE <- "/Users/Valentin/Foret/Travail/PNRVN/Ilots_PNRVN/Out/Excel/Parametres_SIG_Ter_V2.xlsx"
-ParamSIG_FILE <- "/Users/Valentin/Foret/Travail/PNRVN/Ilots_PNRVN/Out/Excel/Parametres_SIG_bis_V3.xlsx"
-ListSheets <- getSheetNames(ParamSIG_FILE) # Liste des feuilles du classeur (<=> rasters)
+# ParamSIG_FILE <- "/Users/Valentin/Foret/Travail/PNRVN/Ilots_PNRVN/Out/Excel/Parametres_SIG_bis_V3.xlsx"
+# ListSheets <- getSheetNames(ParamSIG_FILE) # Liste des feuilles du classeur (<=> rasters)
+parameter_wb_file <- tk_choose.files(
+  default = file.path(rep_Ilots, "/out/excel/"), 
+  caption = "Choix du classeur listant les champs des tables attributaires \u00E0 conserver dans la r\u00E9\u00E9criture des shapes.", 
+  multi = F, 
+  filters = matrix(c(".xlsx", ".xlsx"), nrow = 1, ncol = 2)
+)
+parameter_wb_file <- "/Users/Valentin/Travail/Outils/GitHub/corridor/out/excel/Parametres_SIG_Ter_V3.xlsx" # debug
+
+parameter_wb_step3 <- function(
+  rep, wb_name
+) {
+  # rep <- rep1 <- getwd()# debug
+  # -- extraction du chemin relatif
+  parameter_wb_file <- sub(
+    paste0(rep, "/"), "", parameter_wb_file
+  )
+  # -- liste des feuilles du classeur excel
+  list_sheets <- getSheetNames(parameter_wb_file) # list_sheets = ListSheets
+  
+  for (sheet in list_sheets) {
+    # sheet <- list_sheets[2] # debug
+    # print(sheet) # debug
+    
+    # -- Import des paramètres renseignés dans le classeur Excel ---
+    # -- lecture du classeur excel - feuille !!sheet
+    parameter_df <- # parameter_df = df_BASE
+      read.xlsx(parameter_wb_file, sheet = sheet) #%>% 
+      # filter(!is.na(Thematique_RAS)) %>% 
+      # select(
+      #   Id, Source, shp, Attributs, Encodage, 
+      #   Reecrire_SHP, Union_Champ, Thematique_RAS, Commentaires
+      # )
+    # df_BASE <- read.xlsx(ParamSIG_FILE, sheet = sheet)
+    # %>%
+    #   mutate(Mark = 1)
+    if (!is.element(sheet, c("Parametrage_SIG", "Krigeage"))) {
+      shp_to_detail <- 
+        parameter_df %>% 
+        filter(!is.element(Detail_Valeurs, c("Non", NA))) %>%
+        distinct(
+          Id, Source, shp, Encodage, Detail_Valeurs, 
+          .keep_all = T
+        )
+      
+      # -- Initialisation :
+      df <- data.frame(
+        Id = character(), 
+        Source = character(), 
+        Valeurs = character(), 
+        # Valeurs2 = character(), 
+        shp = character(), 
+        Detail_Valeurs = character()
+      )
+      
+      if (dim(shp_to_detail)[1] > 0) {
+        # ListShp_FILES <- c(
+        #   "/Users/Valentin/Foret/Travail/PNRVN/Ilots_PNRVN/Data/SIG/Vecteurs/DataBrutes/Milieux/geol_zon_etud.shp",
+        #   "/Users/Valentin/Foret/Travail/PNRVN/Ilots_PNRVN/Data/SIG/Vecteurs/DataBrutes/Peuplt/PeupltIFN.shp",
+        #   "/Users/Valentin/Foret/Travail/PNRVN/Ilots_PNRVN/Data/SIG/Vecteurs/DataBrutes/Autres/ser100union.shp",
+        #   "/Users/Valentin/Foret/Travail/PNRVN/Ilots_PNRVN/Data/SIG/Vecteurs/DataBrutes/Stations/StationsONF.shp"
+        # )
+        list_id_shp <- shp_to_detail$Id
+        id_sf <- 
+          read_shp[[1]] %>% 
+          filter(id_sf %in% list_id_shp)
+        attrs_sf <- 
+          read_shp[[1]] %>% 
+          left_join(read_shp[[2]], by = "id_sf")
+        values_sf <- 
+          id_sf %>% 
+          left_join(read_shp[[3]], by = "id_sf")
+        for (i in 1:length(shp_to_detail$shp)) {
+          i = 1 # debug
+          id_shp <- shp_to_detail$Id[i]
+          src_shp <- shp_to_detail$Source[i]
+          name_shp <- shp_to_detail$shp[i]
+          print(paste0("Couche : ", name_shp, " --- Id = ", id_shp)) # debug
+          # pos <- which(names(List_SHP2) %in% name_shp) # Par la suite supprimer pos car travail avec Id
+          # shp <- List_SHP2[[pos[1]]]
+          id_sf <- 
+            read_shp[[1]] %>% 
+            filter(id_sf == id_shp)
+          values_sf <- 
+            read_shp[[2]] %>% 
+            right_join(id_sf)
+          shp_df <- read_shp[][[1]] %>% 
+            data_frame()
+          
+          attrs <- shp_to_detail$Detail_Valeurs[i]
+          
+          # # shp <- ListSHP[[2]]
+          # shp_FILE <- ListShp_FILES[i]
+          # shp <- readOGR(dsn = dirname(shp_FILE), 
+          #                layer = file_path_sans_ext(basename(shp_FILE)), 
+          #                verbose = F, 
+          #                stringsAsFactors = F)
+          # shp <- spTransform(shp, 
+          #                    CRS("+init = epsg:2154"))
+          # shp <- shp[zone, ]
+          
+          # df_temp <- select(shp@data, 
+          #                   one_of(attrs)) %>%
+          df_temp <- 
+            shp_df %>% 
+            # select(one_of(attrs)) %>% # dplyr::
+            # distinct() %>%
+            select(NATURE) %>% # dplyr::
+            st_drop_geometry() %>% 
+            distinct(NATURE, .keep_all = T) %>%
+            # Penser à changer pour mettre l'ID de la couche et non pas juste le nom... !!!!
+            mutate(
+              Id = id_shp, 
+              Source = src_shp, 
+              shp = name_shp, 
+              Detail_Valeurs = attrs
+            ) %>%
+            rename_("Valeurs" = attrs) %>%
+            
+            # mutate(Valeurs2 = Valeurs) %>%
+            
+            select(Id, Source, Valeurs, shp, Detail_Valeurs) # Valeurs2, # dplyr::
+          df <- rbind(df, df_temp)
+        }
+        # df_BASE3 <- mutate(parameter_df, 
+        #                   Valeurs = NULL) %>%
+        #   left_join(df)
+        parameter_df <- merge(parameter_df, df, all = T) %>% # ATTENTION IMPORTANT : défaillance de dplyr : full_join
+          #   incapable de faire la correspondance entre certaines chaînes de charactères (trop longues ou ... ?)
+          # . Pas de problème si chaîne comparées en dehors du tableau.
+          
+          # df_BASE4 <- full_join(parameter_df, df)
+          # df_BASE5 <- inner_join(parameter_df, df)
+          filter(!(!is.element(Detail_Valeurs, c("Non", NA)) & is.na(Valeurs))) %>%
+          # filter(is.element(Detail_Valeurs, c("Non", NA)) | !is.na(Valeurs))) # notation équivalente
+          filter(!is.element(Valeurs, c("#N/A"))) %>%
+          select(one_of(
+            "Id", "Source", "shp", "Encodage", 
+            names(parameter_df)[!names(parameter_df) %in% c("Id", "Source", "shp", "Encodage")]
+          )) # dplyr::
+        # %>%
+        #   df_BASE3 <- mutate(parameter_df, 
+        #                      Valeurs = as.character(Valeurs), 
+        #                      Valeurs = gsub(" ", "_", parameter_df$Valeurs, fixed = T)), 
+        # Valeurs = gsub("'", "", Valeurs, fixed = T), 
+        # Valeurs = gsub("\u00EA", "e", Valeurs, fixed = T), 
+        # Valeurs = gsub("\u00E2", "a", Valeurs, fixed = T), 
+        # Valeurs = gsub("\u00E9", "e", Valeurs, fixed = T), 
+        # Valeurs = gsub("\u00E8", "e", Valeurs, fixed = T), 
+        # Valeurs = gsub("\u00FB", "u", Valeurs, fixed = T), 
+        # Valeurs = gsub("\u00EE", "i", Valeurs, fixed = T), 
+        # Valeurs = gsub("\u00F4", "o", Valeurs, fixed = T))
+      }
+    }
+    
+    # -- Réécriture des tables dans le classeur de paramètres dans une version 2.0 --
+    
+    addWorksheet(wb, sheet)
+    
+    # Ecriture des données dans les feuilles correspondantes
+    addStyle(
+      wb, 
+      sheet = sheet, 
+      Style1, 
+      rows = 1, cols = 1:dim(parameter_df)[2], 
+      gridExpand = T
+    )
+    addStyle(
+      wb, 
+      sheet = sheet, 
+      Style2, 
+      rows = 1 + (1:dim(parameter_df)[1]), cols = 1:dim(parameter_df)[2], 
+      gridExpand = T
+    )
+    
+    writeData(wb, sheet, parameter_df)
+    
+    removeColWidths(wb, sheet = sheet, cols = 1:dim(parameter_df)[2])
+    setColWidths(
+      wb, sheet = sheet, 
+      cols = 1:dim(parameter_df)[2], 
+      widths = rep("auto", dim(parameter_df)[2])
+    )
+    
+  }
+  
+  # -- Sauvegarde du classeur
+  saveWorkbook(
+    wb, 
+    "Out/Excel/Parametres_SIG_Ter.xlsx", 
+    overwrite = T
+  )
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  # -- lecture du classeur excel
+  parameter_df <- 
+    read.xlsx(
+      parameter_wb_file, 
+      sheet = "Parametrage_SIG"
+    ) %>% 
+    filter(!is.na(Thematique_RAS)) %>% 
+    select(
+      Id, Source, shp, Attributs, Encodage, 
+      Reecrire_SHP, Union_Champ, Thematique_RAS, Commentaires
+    )
+  
+  # -- liste des thématiques créées par l'opérateur dans le classeur Parametrage_SIG.xlsx (wb_name)
+  sheet_list <- 
+    unique(df1$Thematique_RAS) %>% 
+    str_split("/") %>% 
+    unlist() %>% 
+    unique()
+  sheet_list <- c("Parametrage_SIG", sheet_list) # TODO : replace Parametrage_SIG by argument
+  
+  # -- message de validation sur les thématiques détectées
+  msg <- tk_messageBox(
+    type = "yesno", 
+    message = paste0(
+      "A CONFIRMER :\nil y a ", 
+      length(sheet_list), 
+      " thématiques à traiter qui ont été détectées dans le classeur '",
+      file, "'"
+    ),
+    icon = "warning"
+  )
+  if (msg == "no") stop("Confirmer les thématiques détectées pour continuer")
+  
+  # -- écriture du classeur "Parametrage_SIG_bis.xlsx" (paste0(wb_name, "_bis.xlsx"))
+  write_wb_2(df1, sheet_list)
+}
+
 
 # --- Création du classeur contenant les critères de décision pour la définition des ilots ---
 wb <- createWorkbook()
-# Création des styles de cellules
-Style1 <- createStyle(
-  fontName = "Arial", fontColour = "black", border = "TopBottomLeftRight", 
-  fgFill = "lightskyblue", textDecoration = "bold", wrapText = F, 
-  valign = "center", halign = "center", 
-  textRotation = 0
-)
-Style2 <- createStyle(
-  fontName = "Arial", wrapText = T, 
-  valign = "center", halign = "center"
-)
 
 for (sheet in ListSheets) {
   # # --- Nom de la feuille ---
   # sheet = ListSheets[5]
-  print(sheet)
-  # --- Import des paramètres renseignés dans le classeur Excel ---
-  df_BASE <- read.xlsx(ParamSIG_FILE, sheet = sheet)
-  # %>%
-  #   mutate(Mark = 1)
-  if (!is.element(sheet, c("Parametrage_SIG", "Krigeage"))) {
-    df_BASE2 <- 
-      df_BASE %>% 
-      filter(!is.element(Detail_Valeurs, c("Non", NA))) %>%
-      distinct(
-        Id, Source, shp, Encodage, Detail_Valeurs, 
-        .keep_all = T
-      )
-
-    # -- Initialisation :
-    df <- data.frame(
-      Id = character(), 
-      Source = character(), 
-      Valeurs = character(), 
-      # Valeurs2 = character(), 
-      shp = character(), 
-      Detail_Valeurs = character()
-    )
-
-    if (dim(df_BASE2)[1] > 0) {
-      # ListShp_FILES <- file.choose()
-      # ListShp_FILES <- c("/Users/Valentin/Foret/Travail/PNRVN/Ilots_PNRVN/Data/SIG/Vecteurs/DataBrutes/Milieux/geol_zon_etud.shp", 
-      #                    "/Users/Valentin/Foret/Travail/PNRVN/Ilots_PNRVN/Data/SIG/Vecteurs/DataBrutes/Peuplt/PeupltIFN.shp", 
-      #                    "/Users/Valentin/Foret/Travail/PNRVN/Ilots_PNRVN/Data/SIG/Vecteurs/DataBrutes/Autres/ser100union.shp", 
-      #                    "/Users/Valentin/Foret/Travail/PNRVN/Ilots_PNRVN/Data/SIG/Vecteurs/DataBrutes/Stations/StationsONF.shp")
-      for (i in 1:length(df_BASE2$shp)) {
-        id_shp <- df_BASE2$Id[i]
-        src_shp <- df_BASE2$Source[i]
-        name_shp <- df_BASE2$shp[i]
-        print(paste0("Couche : ", name_shp, " --- Id = ", id_shp))
-        # pos <- which(names(List_SHP2) %in% name_shp) # Par la suite supprimer pos car travail avec Id
-        # shp <- List_SHP2[[pos[1]]]
-        shp_df <- ListShp_DF[[which(names(ListShp_DF) %in% id_shp)]]
-
-        attrs <- df_BASE2$Detail_Valeurs[i]
-
-        # # shp <- ListSHP[[2]]
-        # shp_FILE <- ListShp_FILES[i]
-        # shp <- readOGR(dsn = dirname(shp_FILE), 
-        #                layer = file_path_sans_ext(basename(shp_FILE)), 
-        #                verbose = F, 
-        #                stringsAsFactors = F)
-        # shp <- spTransform(shp, 
-        #                    CRS("+init = epsg:2154"))
-        # shp <- shp[zone, ]
-
-        # df_temp <- select(shp@data, 
-        #                   one_of(attrs)) %>%
-        df_temp <- 
-          shp_df %>% 
-          select(one_of(attrs)) %>% # dplyr::
-          distinct() %>%
-          # Penser à changer pour mettre l'ID de la couche et non pas juste le nom... !!!!
-          mutate(
-            Id = id_shp, 
-            Source = src_shp, 
-            shp = name_shp, 
-            Detail_Valeurs = attrs
-          ) %>%
-          rename_("Valeurs" = attrs) %>%
-
-          # mutate(Valeurs2 = Valeurs) %>%
-
-          select(Id, Source, Valeurs, shp, Detail_Valeurs) # Valeurs2, # dplyr::
-        df <- rbind(df, df_temp)
-      }
-      # df_BASE3 <- mutate(df_BASE, 
-      #                   Valeurs = NULL) %>%
-      #   left_join(df)
-      df_BASE <- merge(df_BASE, df, all = T) %>% # ATTENTION IMPORTANT : défaillance de dplyr : full_join
-        #   incapable de faire la correspondance entre certaines chaînes de charactères (trop longues ou ... ?)
-        # . Pas de problème si chaîne comparées en dehors du tableau.
-
-        # df_BASE4 <- full_join(df_BASE, df)
-        # df_BASE5 <- inner_join(df_BASE, df)
-        filter(!(!is.element(Detail_Valeurs, c("Non", NA)) & is.na(Valeurs))) %>%
-        # filter(is.element(Detail_Valeurs, c("Non", NA)) | !is.na(Valeurs))) # notation équivalente
-        filter(!is.element(Valeurs, c("#N/A"))) %>%
-        select(one_of(
-          "Id", "Source", "shp", "Encodage", 
-          names(df_BASE)[!names(df_BASE) %in% c("Id", "Source", "shp", "Encodage")]
-        )) # dplyr::
-      # %>%
-      #   df_BASE3 <- mutate(df_BASE, 
-      #                      Valeurs = as.character(Valeurs), 
-      #                      Valeurs = gsub(" ", "_", df_BASE$Valeurs, fixed = T)), 
-      # Valeurs = gsub("'", "", Valeurs, fixed = T), 
-      # Valeurs = gsub("\u00EA", "e", Valeurs, fixed = T), 
-      # Valeurs = gsub("\u00E2", "a", Valeurs, fixed = T), 
-      # Valeurs = gsub("\u00E9", "e", Valeurs, fixed = T), 
-      # Valeurs = gsub("\u00E8", "e", Valeurs, fixed = T), 
-      # Valeurs = gsub("\u00FB", "u", Valeurs, fixed = T), 
-      # Valeurs = gsub("\u00EE", "i", Valeurs, fixed = T), 
-      # Valeurs = gsub("\u00F4", "o", Valeurs, fixed = T))
-    }
-  }
-
-  # -- Réécriture des tables dans le classeur de paramètres dans une version 2.0 --
-
-  addWorksheet(wb, sheet)
-
-  # Ecriture des données dans les feuilles correspondantes
-  addStyle(
-    wb, 
-    sheet = sheet, 
-    Style1, 
-    rows = 1, cols = 1:dim(df_BASE)[2], 
-    gridExpand = T
-  )
-  addStyle(
-    wb, 
-    sheet = sheet, 
-    Style2, 
-    rows = 1 + (1:dim(df_BASE)[1]), cols = 1:dim(df_BASE)[2], 
-    gridExpand = T
-  )
   
-  writeData(wb, sheet, df_BASE)
-  
-  removeColWidths(wb, sheet = sheet, cols = 1:dim(df_BASE)[2])
-  setColWidths(
-    wb, sheet = sheet, 
-    cols = 1:dim(df_BASE)[2], 
-    widths = rep("auto", dim(df_BASE)[2])
-  )
-
-}
-
-# -- Sauvegarde du classeur
-saveWorkbook(
-  wb, 
-  "Out/Excel/Parametres_SIG_Ter.xlsx", 
-  overwrite = T
-)
 
 ##### / #####
 

@@ -32,36 +32,85 @@ library(tcltk)
 save_read_shp <- function(shp, id_shp, read_shp) {
   # TODO : voir si possible de supprimer id_shp ?
   
-  # separate sf object between id and values (+ geometry) - à voir si scinder en plus de morceaux ?
-  values_sf <- 
+  # -- separate sf object between id, attributes, values and geometry
+  # gathered sf object
+  gathered_sf <- 
     shp %>% 
-    gather(variable, value, -geometry) %>% 
+    mutate(
+      id_sfg = 1:dim(shp)[1],
+      id_sfg = paste0("id_sfg_", id_sfg)
+    ) %>% 
+    gather(variable, value, -geometry, -id_sfg) %>% 
     mutate(id_sf = id_shp) %>% 
-    select(id_sf, variable, value, geometry)# %>% 
-  # # TODO : add id for sfg ?
-  # group_by(id_sf, geometry) %>% 
-  # mutate(id_sfg = 1:length(id_sfg)) %>% 
-  # # Erreur : Column `geometry` can't be used as a grouping variable because it's a sfc_POLYGON/sfc
-  # ungroup() %>% 
-  # mutate(id_sfg = paste0(id_sf, id_sfg))
+    select(id_sf, id_sfg, variable, value, geometry)
+  
+  # attributs
+  attrs_sf <- 
+    gathered_sf %>% 
+    st_drop_geometry() %>% 
+    mutate(
+      value = NULL,
+      id_sfg = NULL
+    ) %>%
+    distinct() %>% 
+    mutate(
+      id_sfc = NA,
+      id_sfc = 1:length(id_sfc),
+      id_sfc = paste0(id_sf,"_", id_sfc)
+    ) %>% 
+    select(id_sf, id_sfc, variable)
+  
+  # gathered sf object
+  gathered_sf <- 
+    gathered_sf %>% 
+    right_join(attrs_sf, by = c("id_sf", "variable")) %>% 
+    st_as_sf() %>% 
+    select(id_sfg, id_sf, id_sfc, variable, value, geometry)
+  
+  # values
+  values_sf <- 
+    gathered_sf %>% 
+    st_drop_geometry() %>% 
+    mutate(variable = NULL) %>% 
+    select(id_sfg, id_sf, id_sfc, value)
+  
+  # id
   id_sf <- 
     values_sf %>% 
     select(id_sf) %>% 
-    st_drop_geometry() %>% 
     distinct()
+  
+  # geometry
+  geometry_sf <- 
+    gathered_sf %>% 
+    # TODO : voir s'il n'y a pas une meilleure façon de sauvegarder les geometry (avec st_geometry et en joignant les sfg ?)
+    # st_geometry(gathered_sf) %>% 
+    # select(id_sfg, id_sf, geometry) %>% 
+    select(-id_sfc) %>% 
+    spread(variable, value) %>% 
+    select(id_sfg, id_sf, geometry)
+  
+  # remove gathered_sf object
+  rm(gathered_sf)
   
   # -- sauvegarde des données dans la liste read_shp
   if (length(read_shp) == 0) {
     read_shp[[1]] <- id_sf
-    read_shp[[2]] <- values_sf
+    read_shp[[2]] <- attrs_sf
+    read_shp[[3]] <- values_sf
+    read_shp[[4]] <- geometry_sf
   } else {
     read_shp[[1]] <- rbind(read_shp[[1]], id_sf)
-    read_shp[[2]] <- rbind(read_shp[[2]], values_sf)
+    read_shp[[2]] <- rbind(read_shp[[2]], attrs_sf)
+    read_shp[[3]] <- rbind(read_shp[[3]], values_sf)
+    read_shp[[4]] <- rbind(read_shp[[4]], values_sf)
   }
   
   # -- noms de la liste read_shp
   names(read_shp)[1] <- "id_sf"
-  names(read_shp)[2] <- "values_sf"
+  names(read_shp)[2] <- "attrs_sf"
+  names(read_shp)[3] <- "values_sf"
+  names(read_shp)[4] <- "geometry_sf"
   
   # -- retour de la fonction read_shp
   return(read_shp)
@@ -98,9 +147,8 @@ rewrite_shp <- function(
   dir.create("tables", showWarnings = F) # TODO : dossier déjà créé dans write_wb_1
 
   # ----- Import des paramètres du classeur 'Parametres_SIG.xslx' -----
-  parameter_df <- read.xlsx( # parameter_df = ParamSIG_DF
-    parameter_wb_file, sheet = "Parametrage_SIG"
-    ) %>% 
+  parameter_df <- 
+    read.xlsx(parameter_wb_file, sheet = "Parametrage_SIG") %>%  # parameter_df = ParamSIG_DF
     filter(Reecrire_SHP == "Oui" | !is.na(Thematique_RAS))
   ########## TODO : changer Id en id, Source en source, etc. ##########
   # shp_df <- 
@@ -132,12 +180,12 @@ rewrite_shp <- function(
   for (i in 1:length(list_shp)) {
     # -- paramètres récupérés dans parameter_df :
     # i = 1 # debug
-    # print(i) # debug
+    print(i) # debug
     name_shp <- unname(list_shp[i])
     name_shp <- sub(".dbf", ".shp", name_shp) # TODO : change .dbf en .shp ?
     name_shp <- basename(name_shp)
     id_shp <- names(list_shp)[i]
-    # print(id_shp) # debug
+    print(id_shp) # debug
     df <- parameter_df %>% filter(Id %in% id_shp)
     source_shp <- unique(df$Source)
     source_shp <- sub(".dbf", ".shp", source_shp)
@@ -222,13 +270,11 @@ rewrite_shp <- function(
       ########## / \ ##########
 
       # -- création des dossiers nécessaires
-      save_path <- file.path(compiled_data_rep, dirname(source_shp)) # chemin
-      dir.create(
-        save_path, showWarnings = F, recursive = T
-      )
+      save_path <- 
+        file.path(compiled_data_rep, dirname(source_shp)) # chemin
+      dir.create(save_path, showWarnings = F, recursive = T)
 
-      # -- Ecriture du shape
-      # reptemp <- paste(compiled_data_rep, dir_OUT, sep = "/")
+      # -- écriture du shape
       st_write(
         shp, dsn = save_path, layer = name_shp, 
         driver = "ESRI Shapefile", quiet = T,

@@ -1,3 +1,7 @@
+suppressMessages(library(tcltk))
+suppressMessages(library(dplyr))
+suppressMessages(library(stringr))
+
 #' Liste des couches sous format shp.
 #'
 #' @description Import des données brutes par département, fusion et découpe selon le périmètre de la zone d'étude.
@@ -17,20 +21,20 @@
 
 ############### Liste des couches vectorielles ###############
 ListInfos <- function() {
-  # -- Définition du répertoire de travail
-  rep_Ilots <- tk_choose.dir(
+  # -- définition du répertoire de travail
+  rep_Ilots <- tk_choose.dir( # TODO : rename rep_Ilots as rep
     default = getwd(), 
     caption = "Choix du r\u00E9pertoire de travail"
   )
   setwd(rep_Ilots)
 
-  # -- Choix du répertoire contenant les données vecteurs
+  # -- choix du répertoire contenant les données vecteurs
   rep_SHP <- tk_choose.dir(
     default = "", #getwd(), 
     caption = "Choix du r\u00E9pertoire contenant les donn\u00E9es vecteurs brutes"
   )
 
-  # -- Récupération des fichiers contenus dans rep_SHP
+  # -- récupération des fichiers contenus dans rep_SHP
   # List_DIRS <- list.dirs(path = rep_SHP)
   # List_FILES <- list.files(path = List_DIRS, full.names = T)
   # pos_rep <- str_locate(List_FILES, rep_SHP) # construction chemin relatif :
@@ -63,8 +67,6 @@ ListInfos <- function() {
     )
 
   dir_source_list <- str_split(raw_files_tree$dir_source, "/") # List
-  # names(dir_source_list) <- raw_files_tree$Id
-  
   
   df2 <- data.frame(
     Id = rep.int(raw_files_tree$Id, sapply(dir_source_list, length)), 
@@ -77,36 +79,39 @@ ListInfos <- function() {
     stringsAsFactors = F
   ) %>%
     group_by(source) %>%
-    mutate(Niveau = 1:length(source)) %>%
+    mutate(level = 1:length(source)) %>%
     ungroup() %>% 
-    select(Id, dir, Niveau) %>% 
-    left_join(raw_files_tree)
+    select(Id, dir, level) %>% 
+    left_join(raw_files_tree, by = "Id")
 
   # Reproduction et sauvegarde de la hiérarchie entre les fichiers/dossiers dans un data.frame (df3)
-  Niveaux <- unique(df2$Niveau)
-  df3 <- mutate(df2, DirName = source) %>%
+  levels <- unique(df2$level) # Niveaux = levels
+  df3 <- 
+    df2 %>% 
+    mutate(DirName = source) %>%
     group_by(source) %>%
-    mutate(Niveau_Max = max(Niveau)) %>%
+    mutate(level_max = max(level)) %>% # Niveau_Max = level_max
     ungroup()
-  for (niv in Niveaux[length(Niveaux):1]) {
+  for (niv in levels[length(levels):1]) {
     df3 <- 
       df3 %>% 
       mutate(
-        DirName = ifelse(niv <= Niveau_Max, dirname(DirName), DirName), 
-        dir = ifelse(Niveau == niv, DirName, dir)
+        DirName = ifelse(niv <= level_max, dirname(DirName), DirName), 
+        dir = ifelse(level == niv, DirName, dir)
       )
   }
-  # Création des dossiers nécessaires dans le dossier DataProjet:
-  repDataProjet <- dirname(rep_SHP) # remonter dans les dossiers pour créer DataProjet
-  repDataProjet <- paste0(repDataProjet, "/DataProjet")
+  
+  # Création des dossiers nécessaires dans le dossier revised_data:
+  repDataProjet <- dirname(rep_SHP) # remonter dans les dossiers pour créer revised_data
+  repDataProjet <- paste0(repDataProjet, "/revised_data") # revised_data = DataProjet
   dir.create(repDataProjet, showWarnings = F)
 
   # ---- N.B : Création des dossiers est reportée dans la fonction ReecritureShape (inutile de
   # -- créer des dossiers pour des shapes qui ne seront pas réécris)
 
   # setwd(repDataProjet)
-  # for (niv in Niveaux) {
-  #   Dirs <- filter(df3, Niveau == niv) %>%
+  # for (niv in levels) {
+  #   Dirs <- filter(df3, level == niv) %>%
   #     dplyr::select(Dossier) %>%
   #     distinct() %>% # idem unique mais plus rapide
   #     unlist()
