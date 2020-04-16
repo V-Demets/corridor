@@ -45,23 +45,12 @@ ListChamps2 <- function(
   setwd(rep2) # TODO : mieux gérer les différents répertoires
   
   # -- ancienne écriture
-  # Shp_FILES <- unique(df_Infos$source)
-  # names(Shp_FILES) <- df_Infos$Id[match(Shp_FILES, df_Infos$source)] # Identifiant
-  
-  # -- nouvelle écriture
-  # list_raw_shp <- list_raw_files_tree[
-  #   str_ends(list_raw_files_tree, ".shp")
-  # ]
-  # -- autre écriture
-  # list_raw_shp <- unique(raw_files_tree$source)
-  # names(list_raw_shp) <- raw_files_tree$Id[match(list_raw_shp, raw_files_tree$source)]
   # -- autre écriture
   df <- raw_files_tree %>% select(Id, source) %>% distinct()
   list_raw_shp <- df$source ; names(list_raw_shp) <- df$Id # list_raw_shp = Shp_FILES
   
   # Initialisation boucle
-  # List_SHP <- c()
-  shp_schema <- data.frame( # df_BASE
+  shp_schema <- data.frame( 
     Id = character(), 
     shp = character(), 
     Attributs = character(), 
@@ -91,14 +80,14 @@ ListChamps2 <- function(
       stop("fichier ", file, " introuvable dans le dossier ", rep2)
     }
     
-    # Sauvegarde de la table attributaire lue :
+    # sauvegarde de la table attributaire lue :
     shp_tab <- c(shp_tab, list(tab))
     names(shp_tab)[i] <- file_name
     col_names <- names(tab)
     # col_nb <- length(col_names)
     layer <- file_path_sans_ext(basename(file))
     
-    # Création de la table du classeur 'Parametres_SIG'
+    # création de la table du classeur 'Parametres_SIG'
     df1 <- data.frame(
       Id = file_name, 
       source = file, 
@@ -108,7 +97,6 @@ ListChamps2 <- function(
     )
     shp_schema <- rbind(shp_schema, df1)
     
-    
     info <- round(i / length(list_raw_shp) * 100)
     print(file)
     setTkProgressBar(
@@ -117,7 +105,7 @@ ListChamps2 <- function(
       title = paste0("Lecture des tables attributaires en cours : (", info, " %)"), 
       label = paste0(info, "% done")
     )
-  } #length(list_raw_shp)
+  } # end of loop 1:length(list_raw_shp)
   
   close(pb)
   
@@ -192,8 +180,8 @@ ListChamps2 <- function(
       file = file.path(output_dir, "Parametres_SIG.xlsx"), 
       overwrite = T
     )
-    # write.xlsx(shp_schema, 
-    #            file = paste0(rep1, "/Data/Excel/Table_Champs_SHP.xlsx"))
+    
+    # -- message de fin
     msg <- tk_messageBox(
       type = "ok", 
       message = paste0(

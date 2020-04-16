@@ -6,66 +6,42 @@
 ########## Initialisation ##########
 # ----- Chargement des packages nécessaires
 library(easypackages)
-# libraries(
-#   "tcltk", "openxlsx", "tools", "stringr", "dplyr", "reshape2", "Corridor", 
-#   
-#   "raster", "rgeos", "maptools", "ggplot2", "gdata", "gstat", "sf", "rgdal", "gstat", 
-#   "PermGF", "PermPSDRF"
-# )
+libraries(
+  "tcltk", 
+  "openxlsx", "tools", "stringr", "dplyr", "reshape2", "Corridor",
 
+  "raster", "rgeos", "maptools", "ggplot2", "gdata", "gstat", "sf", "rgdal", "gstat",
+  "PermGF", "PermPSDRF"
+)
+
+# -- définition du répertoire de travail
+rep_Ilots <- tk_choose.dir( # TODO : rename rep_Ilots as rep
+  default = getwd(), 
+  caption = "Choix du r\u00E9pertoire de travail"
+)
+setwd(rep_Ilots)
 
 # ----- 1. Liste des couches disponibles (shapes) et de leur chemin -----
+# sourcing
+source(file.path("scripts/ListInfos.R"), encoding = 'UTF-8', echo=TRUE) # TODO : to rename
+
+# calling
 res <- ListInfos()
-rep_Ilots <- res[[1]] # repTravail
-repDataBrutes <- res[[2]] # repDataBrutes
+
+# share results
+# rep_Ilots <- res[[1]] # repTravail
+repDataBrutes <- res[[2]] # repDataBrutes # TODO : rename raw_data_rep ou raw_data_dir
 Path_DF <- res[[3]] # tableau # TODO : simplifier résultat fonction ListInfos -> nécessité de transformer list_raw_files_tree en data frame ?
 setwd(rep_Ilots)
-# df3 <- res[[1]]
 
 # ----- 2. Création classeur listant les champs des tables attributaires des différents shapes -----
-# Le classeur ne contient à la base qu'une feuille. Il doit ensuite être modifié pour indiquer les shapes
+# Le classeur ne contient à la base qu'une seule feuille. Il doit ensuite être modifié pour indiquer les shapes
 # à réécrire et surtout la répartition des shapes entre différents rasters
 # res1 <- ListChamps1(res[[1]], res[[2]], res[[3]])
-res1 <- ListChamps2(res[[1]], res[[2]], res[[3]])
-
-# df_BASE_FILE <- tk_choose.files(
-#   default = file.path(rep_Ilots, "/out/excel/"), 
-#   caption = "Choix du classeur listant les champs des tables attributaires \u00E0 conserver dans la r\u00E9\u00E9criture des shapes.", 
-#   multi = F, 
-#   filters = matrix(c(".xlsx", ".xlsx"), nrow = 1, ncol = 2)
-# )
-# 
-# df_BASE_FILE <- sub(
-#   paste0(rep_Ilots, "/"), "", df_BASE_FILE
-# )
-# df_BASE <- read.xlsx(df_BASE_FILE, sheet = "Parametrage_SIG")
-# ParamSHP_DF <- df_BASE # TODO : supprimer intermédiaire
-
-# # Ensuite l'opérateur modifie les champs à inclure ou non. Créer une table à inclure par défaut.
-# # Answer3 <- tk_messageBox(type = "yesno", 
-# #                          message = "Existe-t-il une version modifiée du classeur 'Parametres_SIG.xlsx' à intégrer ?")
-# # if (Answer3 == "yes") {
-# # df_BASE_FILE <- tk_choose.files(default = paste0(rep_Ilots, "/Data/Excel/"), 
-# #                                 caption = "Choix du classeur listant les champs des tables atributaires à conserver dans la réécriture des shapes.", 
-# #                                 multi = F, 
-# #                                 filters = matrix(c(".xlsx", ".xlsx"), 
-# #                                                nrow = 1, ncol = 2))
-# df_BASE_FILE <- tk_choose.files(
-#   default = file.path(rep_Ilots, "/out/excel/"), # TODO : gérer le default (vide ou mettre le bon nom de fichier)
-#   caption = "Choix du classeur listant les champs des tables atributaires à conserver dans la réécriture des shapes.", 
-#   multi = F, 
-#   filters = matrix(c(".xlsx", ".xlsx"), nrow = 1, ncol = 2)
-# )
-# 
-# df_BASE <- read.xlsx(df_BASE_FILE, sheet = "Parametrage_SIG")
-# # } else {
-# #   df_BASE <- res1[[1]]
-# #   df_BASE2 <- res1[[2]]
-# # }
-
-# ParamSHP_DF <- df_BASE
-# ParamRAS_DF <- df_BASE2
-
+res1 <- ListChamps2(
+  rep_Ilots, 
+  res[[2]], res[[3]]
+  )
 
   
 #################### styles excel (ListChamps2) - checked till 5. ####################
@@ -288,23 +264,12 @@ if (is.na( st_crs(zone)["epsg"] )) {
   zone <- st_transform(zone, crs = 2154)
 }
   
-# zone <- readOGR( # zone = Zone_SHP
-#   dsn = dirname(zone_file), 
-#   layer = file_path_sans_ext(basename(zone_file)), 
-#   verbose = F, 
-#   stringsAsFactors = F
-# ) %>%
-#   spTransform(CRS("+init = epsg:2154")) # Forcer la couche d'emprise en L_93 ou laisser le choix ?
-
-# if (is.null(zone) | class(zone)[1] != "SpatialPolygonsDataFrame") {
-#   stop("Fichier d'emprise incorrect : (is.null(zone) | class(zone)[1] != 'SpatialPolygonsDataFrame'")
-# }
 if (is.null(zone) | class(zone)[1] != "sf") {
   stop("Fichier d'emprise incorrect : (is.null(zone) | class(zone)[1] != 'sf'")
 }
+
 # --- Rajout du buffer au périmètre d'étude ---
 buffer_width = 1000 # buffer_width = Buffer_Width
-# zone <- gBuffer(zone_shp, width = Buffer_Width)
 zone_expanded <- st_buffer(zone, dist = buffer_width) # zone_expanded = zone
 
 # ----- tableau pour système de projection manquant (ReecritureShape2.R)
@@ -319,7 +284,6 @@ zone_expanded <- st_buffer(zone, dist = buffer_width) # zone_expanded = zone
 #   stringsAsFactors = F
 # )
 
-# ParamSIG_FILE <- "/Users/Valentin/Foret/Travail/PNRVN/Ilots_PNRVN/Out/Excel/Parametres_SIG_bis_V3.xlsx"
 parameter_wb_file <- "out/excel/Parametres_SIG_bis_V3.xlsx" # debug
 
 # --- Lecture des shapes et réécriture (réécriture à mettre en option ?) ---
@@ -377,6 +341,7 @@ parameter_wb_file <- tk_choose.files(
 )
 parameter_wb_file <- "/Users/Valentin/Travail/Outils/GitHub/corridor/out/excel/Parametres_SIG_Ter_V3.xlsx" # debug
 
+library(openxlsx)
 parameter_wb_step3 <- function(
   rep, wb_name
 ) {
@@ -495,7 +460,7 @@ parameter_wb_step3 <- function(
         # df_BASE3 <- mutate(parameter_df, 
         #                   Valeurs = NULL) %>%
         #   left_join(df)
-        parameter_df <- merge(parameter_df, df, all = T) %>% # ATTENTION IMPORTANT : défaillance de dplyr : full_join
+        parameter_df <- full_join(parameter_df, df) %>% # ATTENTION IMPORTANT : défaillance de dplyr : full_join
           #   incapable de faire la correspondance entre certaines chaînes de charactères (trop longues ou ... ?)
           # . Pas de problème si chaîne comparées en dehors du tableau.
           
@@ -557,7 +522,7 @@ parameter_wb_step3 <- function(
   # -- Sauvegarde du classeur
   saveWorkbook(
     wb, 
-    "Out/Excel/Parametres_SIG_Ter.xlsx", 
+    "out/excel/Parametres_SIG_Ter_test.xlsx", # TODO : rename dossier Out
     overwrite = T
   )
   
@@ -610,13 +575,14 @@ parameter_wb_step3 <- function(
   write_wb_2(df1, sheet_list)
 }
 
+parameter_wb_step3(rep_Ilots, parameter_wb_file)
 
 # --- Création du classeur contenant les critères de décision pour la définition des ilots ---
-wb <- createWorkbook()
-
-for (sheet in ListSheets) {
-  # # --- Nom de la feuille ---
-  # sheet = ListSheets[5]
+# wb <- createWorkbook()
+# 
+# for (sheet in ListSheets) {
+#   # # --- Nom de la feuille ---
+#   # sheet = ListSheets[5]
   
 
 ##### / #####
